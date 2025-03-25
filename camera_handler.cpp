@@ -258,21 +258,27 @@ void CameraHandler::requestComplete(Request* request) {
         uint8_t* data = static_cast<uint8_t*>(mappedData);
         cv::Mat rawFrame(config.size.height, config.size.width, CV_8UC3, data, config.stride);
 
-        FrameBufferManager::getInstance().addFrame(rawFrame);
+        // Create FrameData object
+        FrameData frameData;
+        frameData.image = rawFrame.clone(); // Deep copy to store in buffer
+        frameData.timestamp = metadata.timestamp;
+        frameData.sequence = metadata.sequence;
+        frameData.format = config.pixelFormat.toString();
+        frameData.size = cv::Size(config.size.width, config.size.height);
+        frameData.fps = fps_;
 
-        std::cout << " | Frame seq: " << metadata.sequence
-                  << " | Format: " << config.pixelFormat.toString()
-                  << " | Size: " << config.size.width << "x" << config.size.height
-                  << " | FPS: " << std::fixed << std::setprecision(2) << fps_
-                  << " | Timestamp: " << metadata.timestamp << " ns" << std::endl;
+        // Add to buffer
+        FrameBufferManager::getInstance().addFrame(frameData);
+
+//        std::cout << " | Frame seq: " << frameData.sequence << std::endl;
+//                  << " | Format: " << frameData.format
+//                  << " | Size: " << frameData.size.width << "x" << frameData.size.height
+//                  << " | FPS: " << std::fixed << std::setprecision(2) << frameData.fps
+//                  << " | Timestamp: " << frameData.timestamp << " ns" << std::endl;
 
         munmap(mappedData, length);
     }
 
     request->reuse(Request::ReuseBuffers);
     camera_->queueRequest(request);
-}
-
-void CameraHandler::getBufferedFrames(std::vector<cv::Mat>& outputFrames) {
-    FrameBufferManager::getInstance().getAllFrames(outputFrames);
 }
