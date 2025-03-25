@@ -1,5 +1,4 @@
 #include "camera_handler.h"
-#include "dataloader.h"
 #include "model.h"
 #include <thread>
 #include <atomic>
@@ -15,21 +14,22 @@ void processYoloRealtime(model& yoloDetector, std::atomic<bool>& running) {
     }
 }
 
-void processFrames(DataLoader& dataLoader) {
-    while (true) {
+void processFrames(std::atomic<bool>& running){
+    while(running){
         std::vector<cv::Mat> batch;
-        if (!dataLoader.getBatch(batch)) {
-            break;
+        FrameBufferManager::getInstance().getAllFrames(batch);
+        if(!batch.empty()){
+            std::cout << "Processing batch of " << batch.size() << " frame..." << std::endl;
+            //Future AI models can process batch here
+            FrameBufferManager::getInstance().clearFrames(); //clear the buffer after processing
         }
-        std::cout << "Processing batch of " << batch.size() << " frames in DataLoader..." << std::endl;
-        // Future AI models can process batch here
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
 int main() {
     try {
         CameraHandler cameraHandler;
-        DataLoader dataLoader(500);
         model yoloDetector("/home/pi5/ai/models/yolov4-tiny.cfg",
                            "/home/pi5/ai/models/yolov4-tiny.weights",
                            "/home/pi5/ai/models/coco.names");
@@ -40,25 +40,15 @@ int main() {
         cameraHandler.configureCamera();
 
         std::thread yoloThread(processYoloRealtime, std::ref(yoloDetector), std::ref(running));
-        std::thread processingThread(processFrames, std::ref(dataLoader));
-
+        std::thread processingThread(processFrames, std::ref(running));
         cameraHandler.startStreaming();
 
         std::cout << "Streaming... Press Ctrl+C to exit." << std::endl;
-        while (true) {
-            if (cameraHandler.isBufferFull()) {
-                std::vector<cv::Mat> frames;
-                cameraHandler.getBufferedFrames(frames);
-                for (const auto& frame : frames) {
-                    dataLoader.addFrame(frame);
-                }
-                FrameBufferManager::getInstance().clearFrames(); // Clear the buffer after transfer
-            }
+
+        while (running){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-
         running = false;
-        dataLoader.stop();
         yoloThread.join();
         processingThread.join();
     }
