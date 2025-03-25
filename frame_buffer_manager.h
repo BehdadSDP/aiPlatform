@@ -43,6 +43,12 @@ public:
         condVar_.wait(lock, [this] { return !frames_.empty(); });
     }
 
+    void clearFrames() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        frames_.clear();
+        condVar_.notify_all();
+    }
+
 private:
     FrameBufferManager() : maxFrames_(500) {}
     FrameBufferManager(const FrameBufferManager&) = delete;

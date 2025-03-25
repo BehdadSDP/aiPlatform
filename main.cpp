@@ -52,6 +52,7 @@ int main() {
                 for (const auto& frame : frames) {
                     dataLoader.addFrame(frame);
                 }
+                FrameBufferManager::getInstance().clearFrames(); // Clear the buffer after transfer
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }

@@ -215,7 +215,6 @@ void CameraHandler::startStreaming() {
             throw CameraException("Failed to queue request");
         }
     }
-    frameCount_ = 0;
     printMessage("Camera streaming started. Press Ctrl+C to stop.");
 }
 
@@ -246,8 +245,6 @@ void CameraHandler::requestComplete(Request* request) {
     for (const auto& [stream, buffer] : buffers) {
         const FrameMetadata& metadata = buffer->metadata();
         const StreamConfiguration& config = stream->configuration();
-
-        frameCount_++;
 
         const auto& planes = buffer->planes();
         int fd = planes[0].fd.get();
