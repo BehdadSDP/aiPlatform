@@ -5,23 +5,23 @@
 
 void processYoloRealtime(model& yoloDetector, std::atomic<bool>& running) {
     while (running) {
-        FrameBufferManager::getInstance().waitForNewFrame(); // Wait for a new frame
+        FrameBufferManager::getInstance().waitForNewFrame();
         cv::Mat frame;
         if (FrameBufferManager::getInstance().getLatestFrame(frame)) {
             std::vector<cv::Mat> singleFrame = {frame};
-            yoloDetector.detectAndDisplay(singleFrame); // Process immediately
+            yoloDetector.detectAndDisplay(singleFrame);
         }
     }
 }
 
-void processFrames(std::atomic<bool>& running){
-    while(running){
+void processFrames(std::atomic<bool>& running) {
+    while (running) {
         std::vector<cv::Mat> batch;
         FrameBufferManager::getInstance().getAllFrames(batch);
-        if(!batch.empty()){
-            std::cout << "Processing batch of " << batch.size() << " frame..." << std::endl;
-            //Future AI models can process batch here
-            FrameBufferManager::getInstance().clearFrames(); //clear the buffer after processing
+        if (!batch.empty()) {
+            std::cout << "Processing batch of " << batch.size() << " frames..." << std::endl;
+            // Future AI models can process batch here
+            FrameBufferManager::getInstance().clearFrames(); // Optional: clear if you want to reset
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
