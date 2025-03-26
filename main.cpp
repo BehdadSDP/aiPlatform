@@ -3,7 +3,7 @@
 #include <thread>
 #include <atomic>
 
-void processYoloRealtime(model& yoloDetector, std::atomic<bool>& running) {
+void threadDetection(model& yoloDetector, std::atomic<bool>& running) {
     while (running) {
         FrameBufferManager::getInstance().waitForNewFrame();
         FrameData frameData;
@@ -45,7 +45,7 @@ int main() {
         cameraHandler.acquireCamera();
         cameraHandler.configureCamera();
 
-        std::thread yoloThread(processYoloRealtime, std::ref(yoloDetector), std::ref(running));
+        std::thread yoloThread(threadDetection, std::ref(yoloDetector), std::ref(running));
 //        std::thread processingThread(processFrames, std::ref(running));
         cameraHandler.startStreaming();
 

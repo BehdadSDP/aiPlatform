@@ -8,6 +8,7 @@ CONFIG -= app_bundle
 
 SOURCES += \
     camera_handler.cpp \
+    control_unit.cpp \
     dataloader.cpp \
     frame_buffer_manager.cpp \
     main.cpp \
@@ -35,6 +36,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 HEADERS += \
     camera_handler.h \
+    control_unit.h \
     dataloader.h \
     frame_buffer_manager.h \
     model.h
