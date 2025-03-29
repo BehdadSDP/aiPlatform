@@ -8,23 +8,31 @@ CONFIG -= app_bundle
 
 SOURCES += \
     camera_handler.cpp \
-    control_unit.cpp \
-    dataloader.cpp \
     frame_buffer_manager.cpp \
     main.cpp \
-    model.cpp
+    model.cpp \
+    shared_data.cpp \
+    vittracker.cpp
 
 # Add libcamera and dependencies
 LIBS += -L/usr/lib -lcamera -lcamera-base -lpisp -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_videoio -lopencv_imgcodecs -lopencv_dnn -lcamera
 
+# OpenCV libraries (try different combinations)
+LIBS += -L/usr/local/lib \
+        -lopencv_core \
+        -lopencv_imgproc \
+        -lopencv_highgui \
+        -lopencv_videoio \
+        -lopencv_imgcodecs \
+        -lopencv_dnn \
+        -lopencv_tracking \
+        -lopencv_video \  # Try adding this
+        -lopencv_objdetect \  # Sometimes needed
+        -lopencv_ml \  # Sometimes needed
+        -lopencv_gapi  # Required for some newer tracking algorithms
 
 INCLUDEPATH += /usr/include/libcamera
-INCLUDEPATH += /usr/include/opencv4
-
-#TRANSLATIONS += \
-#    aiFirmware_en_GB.ts
-#CONFIG += lrelease
-#CONFIG += embed_translations
+INCLUDEPATH += /usr/local/include/opencv4
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
@@ -36,7 +44,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 HEADERS += \
     camera_handler.h \
-    control_unit.h \
-    dataloader.h \
     frame_buffer_manager.h \
-    model.h
+    model.h \
+    shared_data.h \
+    vittracker.h
