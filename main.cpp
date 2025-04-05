@@ -86,39 +86,39 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
             ControlUnit::Action action = controlUnit.decideAction(sharedData, isTracking, lastTrackBox);
 
             switch (action) {
-                case ControlUnit::Action::INITIALIZE: {
-                    cv::Rect yoloBox;
-                    {
-                        std::lock_guard<std::mutex> lock(sharedData.mtx);
-                        yoloBox = sharedData.detection.box;
-                    }
-                    tracker = std::make_unique<VitTracker>(vitModelPath);
-                    tracker->init(frame, yoloBox);
-                    isTracking = true;
-                    framesWithoutDetection = 0;
-                    break;
+            case ControlUnit::Action::INITIALIZE: {
+                cv::Rect yoloBox;
+                {
+                    std::lock_guard<std::mutex> lock(sharedData.mtx);
+                    yoloBox = sharedData.detection.box;
                 }
-                case ControlUnit::Action::REINITIALIZE: {
-                    cv::Rect yoloBox;
-                    {
-                        std::lock_guard<std::mutex> lock(sharedData.mtx);
-                        yoloBox = sharedData.detection.box;
-                    }
-                    tracker->init(frame, yoloBox);
-                    isTracking = true;
-                    framesWithoutDetection = 0;
-                    break;
+                tracker = std::make_unique<VitTracker>(vitModelPath);
+                tracker->init(frame, yoloBox);
+                isTracking = true;
+                framesWithoutDetection = 0;
+                break;
+            }
+            case ControlUnit::Action::REINITIALIZE: {
+                cv::Rect yoloBox;
+                {
+                    std::lock_guard<std::mutex> lock(sharedData.mtx);
+                    yoloBox = sharedData.detection.box;
                 }
-                case ControlUnit::Action::CONTINUE:
-                    if (!trackerValid) {
-                        isTracking = false;
-                        tracker.reset();
-                    }
-                    break;
-                case ControlUnit::Action::STOP:
+                tracker->init(frame, yoloBox);
+                isTracking = true;
+                framesWithoutDetection = 0;
+                break;
+            }
+            case ControlUnit::Action::CONTINUE:
+                if (!trackerValid) {
                     isTracking = false;
                     tracker.reset();
-                    break;
+                }
+                break;
+            case ControlUnit::Action::STOP:
+                isTracking = false;
+                tracker.reset();
+                break;
             }
 
             // Check if YOLO detection is still valid

@@ -56,3 +56,15 @@ bool ControlUnit::shouldTrack() const {
     int counter = trackingFrameCounter_++;
     return (counter % trackingFrameInterval_ == 0);
 }
+
+void ControlUnit::setDetectionMode(Mode mode) {
+    detectionMode_ = mode;
+    detectionFrameCounter_ = 0; // Reset counter on mode change
+    std::cout << "Control Unit: Detection mode set to " << static_cast<int>(mode) << std::endl;
+}
+
+void ControlUnit::setTrackingMode(Mode mode) {
+    trackingMode_ = mode;
+    trackingFrameCounter_ = 0; // Reset counter on mode change
+    std::cout << "Control Unit: Tracking mode set to " << static_cast<int>(mode) << std::endl;
+}

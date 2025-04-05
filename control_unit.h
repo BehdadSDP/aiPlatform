@@ -14,6 +14,11 @@ public:
         STOP
     };
 
+    enum class Mode {
+        RUN,      // Process every N frames
+        STANDBY   // Threads run, no processing
+    };
+
     // Existing decision method
     Action decideAction(SingleObjectData& sharedData, bool isTracking, const cv::Rect& lastTrackBox) const;
 
@@ -23,7 +28,15 @@ public:
     bool shouldDetect() const;
     bool shouldTrack() const;
 
+    // New methods for mode control
+    void setDetectionMode(Mode mode);
+    void setTrackingMode(Mode mode);
+    Mode getDetectionMode() const { return detectionMode_; }
+    Mode getTrackingMode() const { return trackingMode_; }
+
 private:
+    std::atomic<Mode> detectionMode_{Mode::RUN}; // Default to RUN
+    std::atomic<Mode> trackingMode_{Mode::RUN};  // Default to RUN
     std::atomic<int> detectionFrameInterval_{1}; // Default: process every frame
     std::atomic<int> trackingFrameInterval_{1};  // Default: process every frame
     mutable std::atomic<int> detectionFrameCounter_{0}; // Counter for detection
