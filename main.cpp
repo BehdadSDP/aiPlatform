@@ -4,6 +4,7 @@
 #include "shared_data.h"
 #include <thread>
 #include <atomic>
+#include "control_unit.h"
 
 static constexpr float CONF_THRESHOLD = 0.5f; // Minimum YOLO confidence for your object
 
@@ -49,21 +50,20 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
         }
 
         // (Optional) you can also draw and show the YOLO bounding box if desired
-         cv::rectangle(frame, bestBox, cv::Scalar(0,255,0), 2);
-         cv::imshow("YOLO View", frame);
-         cv::waitKey(1);
+//         cv::rectangle(frame, bestBox, cv::Scalar(0,255,0), 2);
+//         cv::imshow("YOLO View", frame);
+//         cv::waitKey(1);
     }
 }
 
 void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running)
 {
-    // Path to your ONNX tracker model
     std::string vitModelPath = "/home/pi5/ai_platform/aiPlatform/models/object_tracking_vittrack_2023sep.onnx";
     std::unique_ptr<VitTracker> tracker;
     bool isTracking = false;
+    ControlUnit controlUnit;
 
     while (running) {
-        // Wait for new frame
         FrameBufferManager::getInstance().waitForNewFrame();
 
         FrameData frameData;
@@ -75,49 +75,46 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running)
             continue;
         }
 
-        // 1) Grab the YOLO bounding box from shared data
-        cv::Rect yoloBox;
-        bool yoloValid = false;
-        {
-            std::lock_guard<std::mutex> lock(sharedData.mtx);
-            yoloValid = sharedData.detection.valid;
-            if (yoloValid) {
-                yoloBox = sharedData.detection.box;
+        cv::Rect lastTrackBox = (tracker && isTracking) ? tracker->update(frame) : cv::Rect();
+        ControlUnit::Action action = controlUnit.decideAction(sharedData, isTracking, lastTrackBox);
+
+        switch (action) {
+            case ControlUnit::Action::INITIALIZE: {
+                cv::Rect yoloBox;
+                {
+                    std::lock_guard<std::mutex> lock(sharedData.mtx);
+                    yoloBox = sharedData.detection.box;
+                }
+                tracker = std::make_unique<VitTracker>(vitModelPath);
+                tracker->init(frame, yoloBox);
+                isTracking = true;
+                break;
             }
-        }
-
-        // 2) If not tracking, and YOLO is valid, initialize the tracker
-        if (!isTracking && yoloValid) {
-            tracker = std::make_unique<VitTracker>(vitModelPath);
-            tracker->init(frame, yoloBox);
-            isTracking = true;
-        }
-        else if (isTracking) {
-            // 3) If we are tracking, call update
-            cv::Rect trackBox = tracker->update(frame);
-
-            // If the tracker fails or returns invalid box, reset
-            if (trackBox.width <= 0 || trackBox.height <= 0) {
+            case ControlUnit::Action::REINITIALIZE: {
+                cv::Rect yoloBox;
+                {
+                    std::lock_guard<std::mutex> lock(sharedData.mtx);
+                    yoloBox = sharedData.detection.box;
+                }
+                tracker->init(frame, yoloBox);
+                isTracking = true;
+                break;
+            }
+            case ControlUnit::Action::CONTINUE:
+                break;
+            case ControlUnit::Action::STOP:
                 isTracking = false;
                 tracker.reset();
-            }
-            else {
-                // (Optional) "Refresh" the tracker with YOLO's bounding box
-                // if YOLO is valid. This prevents drift.
-                if (yoloValid) {
-                    // For example, if you want to re-init if YOLO is confident:
-                    tracker->init(frame, yoloBox);
-                }
-
-                // Draw the tracked box
-                cv::rectangle(frame, trackBox, cv::Scalar(0,0,255), 2);
-                cv::putText(frame, "Tracking", trackBox.tl(),
-                            cv::FONT_HERSHEY_SIMPLEX, 0.6,
-                            cv::Scalar(0,0,255), 2);
-            }
+                break;
         }
 
-        // (Optional) Show the tracker result
+        if (isTracking) {
+            cv::rectangle(frame, lastTrackBox, cv::Scalar(0,0,255), 2);
+            cv::putText(frame, "Tracking", lastTrackBox.tl(),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                        cv::Scalar(0,0,255), 2);
+        }
+
         cv::imshow("Tracker Thread View", frame);
         cv::waitKey(1);
     }
