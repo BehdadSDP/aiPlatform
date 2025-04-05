@@ -1,17 +1,22 @@
 #include "camera_handler.h"
+#include "frame_buffer_manager.h"
 #include "model.h"
-#include "vittracker.h"
 #include "shared_data.h"
+#include "vittracker.h"
+#include "control_unit.h"
 #include <thread>
 #include <atomic>
-#include "control_unit.h"
+#include <iostream>
+#include <csignal>
 
-static constexpr float CONF_THRESHOLD = 0.5f; // Minimum YOLO confidence for your object
+static constexpr float CONF_THRESHOLD = 0.5f;
 
-void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<bool> &running)
+std::atomic<bool>* g_running = nullptr;
+void signalHandler(int) { if (g_running) g_running->store(false); }
+
+void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit)
 {
     while (running) {
-        // Wait for new frame
         FrameBufferManager::getInstance().waitForNewFrame();
 
         FrameData frameData;
@@ -23,45 +28,39 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
             continue;
         }
 
-        // 1) Run YOLO to get the best bounding box for one object
-        std::vector<model::Detection> detections = yoloDetector.detect(frame);
+        if (controlUnit.shouldDetect()) {
+            std::vector<model::Detection> detections = yoloDetector.detect(frame);
 
-        float bestConf = -1.0f;
-        cv::Rect bestBox;
-        for (auto &det : detections) {
-            if (det.confidence > bestConf) {
-                bestConf = det.confidence;
-                bestBox  = det.box;
+            float bestConf = -1.0f;
+            cv::Rect bestBox;
+            for (auto &det : detections) {
+                if (det.confidence > bestConf) {
+                    bestConf = det.confidence;
+                    bestBox = det.box;
+                }
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(sharedData.mtx);
+                if (bestConf > CONF_THRESHOLD) {
+                    sharedData.detection.box = bestBox;
+                    sharedData.detection.valid = true;
+                } else {
+                    sharedData.detection.valid = false;
+                }
+                sharedData.detection.frameSeq = frameData.sequence;
             }
         }
-
-        // 2) Write the best bounding box into sharedData
-        {
-            std::lock_guard<std::mutex> lock(sharedData.mtx);
-            if (bestConf > 0.5f) {
-                sharedData.detection.box = bestBox;
-                sharedData.detection.valid = true;
-            } else {
-                // If YOLO didn't see anything, mark invalid
-                sharedData.detection.valid = false;
-            }
-            // Store the frame sequence or timestamp
-            sharedData.detection.frameSeq = frameData.sequence;
-        }
-
-        // (Optional) you can also draw and show the YOLO bounding box if desired
-//         cv::rectangle(frame, bestBox, cv::Scalar(0,255,0), 2);
-//         cv::imshow("YOLO View", frame);
-//         cv::waitKey(1);
     }
 }
 
-void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running)
+void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit)
 {
     std::string vitModelPath = "/home/pi5/ai_platform/aiPlatform/models/object_tracking_vittrack_2023sep.onnx";
     std::unique_ptr<VitTracker> tracker;
     bool isTracking = false;
-    ControlUnit controlUnit;
+    int framesWithoutDetection = 0; // Counter for frames without valid YOLO detection
+    const int maxFramesWithoutDetection = 30; // Threshold to stop tracking (adjustable)
 
     while (running) {
         FrameBufferManager::getInstance().waitForNewFrame();
@@ -75,44 +74,78 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running)
             continue;
         }
 
-        cv::Rect lastTrackBox = (tracker && isTracking) ? tracker->update(frame) : cv::Rect();
-        ControlUnit::Action action = controlUnit.decideAction(sharedData, isTracking, lastTrackBox);
+        if (controlUnit.shouldTrack()) {
+            cv::Rect lastTrackBox;
+            bool trackerValid = false;
 
-        switch (action) {
-            case ControlUnit::Action::INITIALIZE: {
-                cv::Rect yoloBox;
-                {
-                    std::lock_guard<std::mutex> lock(sharedData.mtx);
-                    yoloBox = sharedData.detection.box;
-                }
-                tracker = std::make_unique<VitTracker>(vitModelPath);
-                tracker->init(frame, yoloBox);
-                isTracking = true;
-                break;
+            if (tracker && isTracking) {
+                lastTrackBox = tracker->update(frame);
+                trackerValid = lastTrackBox.width > 0 && lastTrackBox.height > 0 && tracker->isInitialized();
             }
-            case ControlUnit::Action::REINITIALIZE: {
-                cv::Rect yoloBox;
-                {
-                    std::lock_guard<std::mutex> lock(sharedData.mtx);
-                    yoloBox = sharedData.detection.box;
-                }
-                tracker->init(frame, yoloBox);
-                isTracking = true;
-                break;
-            }
-            case ControlUnit::Action::CONTINUE:
-                break;
-            case ControlUnit::Action::STOP:
-                isTracking = false;
-                tracker.reset();
-                break;
-        }
 
-        if (isTracking) {
-            cv::rectangle(frame, lastTrackBox, cv::Scalar(0,0,255), 2);
-            cv::putText(frame, "Tracking", lastTrackBox.tl(),
-                        cv::FONT_HERSHEY_SIMPLEX, 0.6,
-                        cv::Scalar(0,0,255), 2);
+            ControlUnit::Action action = controlUnit.decideAction(sharedData, isTracking, lastTrackBox);
+
+            switch (action) {
+                case ControlUnit::Action::INITIALIZE: {
+                    cv::Rect yoloBox;
+                    {
+                        std::lock_guard<std::mutex> lock(sharedData.mtx);
+                        yoloBox = sharedData.detection.box;
+                    }
+                    tracker = std::make_unique<VitTracker>(vitModelPath);
+                    tracker->init(frame, yoloBox);
+                    isTracking = true;
+                    framesWithoutDetection = 0;
+                    break;
+                }
+                case ControlUnit::Action::REINITIALIZE: {
+                    cv::Rect yoloBox;
+                    {
+                        std::lock_guard<std::mutex> lock(sharedData.mtx);
+                        yoloBox = sharedData.detection.box;
+                    }
+                    tracker->init(frame, yoloBox);
+                    isTracking = true;
+                    framesWithoutDetection = 0;
+                    break;
+                }
+                case ControlUnit::Action::CONTINUE:
+                    if (!trackerValid) {
+                        isTracking = false;
+                        tracker.reset();
+                    }
+                    break;
+                case ControlUnit::Action::STOP:
+                    isTracking = false;
+                    tracker.reset();
+                    break;
+            }
+
+            // Check if YOLO detection is still valid
+            bool yoloValid = false;
+            {
+                std::lock_guard<std::mutex> lock(sharedData.mtx);
+                yoloValid = sharedData.detection.valid;
+            }
+
+            if (isTracking && !yoloValid) {
+                framesWithoutDetection++;
+                if (framesWithoutDetection >= maxFramesWithoutDetection) {
+                    isTracking = false;
+                    tracker.reset();
+                    std::cout << "Tracker stopped: No detection for " << maxFramesWithoutDetection << " frames" << std::endl;
+                }
+            } else if (yoloValid) {
+                framesWithoutDetection = 0; // Reset counter when detection is valid
+            }
+
+            // Draw only if tracking is valid
+            if (isTracking && trackerValid) {
+                cv::rectangle(frame, lastTrackBox, cv::Scalar(0,0,255), 2);
+                cv::putText(frame, "Tracking", lastTrackBox.tl(),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                            cv::Scalar(0,0,255), 2);
+            }
         }
 
         cv::imshow("Tracker Thread View", frame);
@@ -125,42 +158,52 @@ int main()
     try {
         CameraHandler cameraHandler;
         model yoloDetector("/home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.cfg",
-                           "//home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.weights",
+                           "/home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.weights",
                            "/home/pi5/ai_platform/aiPlatform/models/coco.names");
 
         std::atomic<bool> running(true);
+        ControlUnit controlUnit;
+        g_running = &running;
+        signal(SIGINT, signalHandler);
 
-        // Initialize camera
         cameraHandler.initialize();
         cameraHandler.acquireCamera();
         cameraHandler.configureCamera();
-        cameraHandler.startStreaming();
 
-        // Create shared data
+        int detectionInterval;
+        std::cout << "Enter frame interval for detection (e.g., 10 for every 10th frame): ";
+        std::cin >> detectionInterval;
+        controlUnit.setDetectionFrameInterval(detectionInterval);
+
+        int trackingInterval;
+        std::cout << "Enter frame interval for tracking (e.g., 5 for every 5th frame): ";
+        std::cin >> trackingInterval;
+        controlUnit.setTrackingFrameInterval(trackingInterval);
+
         SingleObjectData singleObjData;
         {
             std::lock_guard<std::mutex> lock(singleObjData.mtx);
-            singleObjData.detection.valid = false; // start invalid
+            singleObjData.detection.valid = false;
             singleObjData.detection.frameSeq = 0;
         }
 
-        // Start YOLO thread
-        std::thread yoloThread(threadYolo, std::ref(yoloDetector), std::ref(singleObjData), std::ref(running));
+        cameraHandler.startStreaming();
 
-        // Start Tracker thread
-        std::thread trackerThread(threadTracker, std::ref(singleObjData), std::ref(running));
+        std::thread yoloThread(threadYolo, std::ref(yoloDetector), std::ref(singleObjData), std::ref(running), std::ref(controlUnit));
+        std::thread trackerThread(threadTracker, std::ref(singleObjData), std::ref(running), std::ref(controlUnit));
 
         std::cout << "Streaming... Press Ctrl+C to exit." << std::endl;
 
-        // Wait or watch for signals to stop
-        while (/*some condition*/ true) {
+        while (running) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            // If user hits Ctrl+C or some break condition, set running=false
         }
 
+        cameraHandler.stopStreaming();
         running = false;
         yoloThread.join();
         trackerThread.join();
+
+        std::cout << "Camera streaming stopped." << std::endl;
     }
     catch (const CameraException &e) {
         std::cerr << e.what() << std::endl;

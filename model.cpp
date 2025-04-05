@@ -2,12 +2,11 @@
 #include <stdexcept>
 #include <iomanip>
 
-// Constructor definition matching model(const std::string&, ...)
+// Constructor (unchanged)
 model::model(const std::string &configPath,
              const std::string &weightsPath,
              const std::string &namesPath)
 {
-    // 1) Load the YOLOv4-tiny model from config and weights
     yoloNet_ = cv::dnn::readNetFromDarknet(configPath, weightsPath);
     if (yoloNet_.empty()) {
         throw std::runtime_error("Failed to load YOLO model from " + configPath + " and " + weightsPath);
@@ -15,7 +14,6 @@ model::model(const std::string &configPath,
     yoloNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
     yoloNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
 
-    // 2) Load class names from the names file
     std::ifstream classFile(namesPath);
     if (!classFile.is_open()) {
         throw std::runtime_error("Failed to open class names file: " + namesPath);
@@ -59,7 +57,7 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
             cv::Point classIdPoint;
             double confidence;
             cv::minMaxLoc(scores, 0, &confidence, 0, &classIdPoint);
-            if (confidence > confThreshold) {
+            if (confidence > confThreshold && classIdPoint.x == 0) { // Filter for "person" (class ID 0)
                 int centerX = (int)(data[0] * frame.cols);
                 int centerY = (int)(data[1] * frame.rows);
                 int width   = (int)(data[2] * frame.cols);

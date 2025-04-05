@@ -5,7 +5,6 @@ ControlUnit::Action ControlUnit::decideAction(SingleObjectData& sharedData, bool
     bool yoloValid = false;
     cv::Rect yoloBox;
 
-    // Lock the mutex (now works because sharedData is non-const)
     {
         std::lock_guard<std::mutex> lock(sharedData.mtx);
         yoloValid = sharedData.detection.valid;
@@ -34,4 +33,26 @@ ControlUnit::Action ControlUnit::decideAction(SingleObjectData& sharedData, bool
     }
 
     return Action::STOP;
+}
+
+void ControlUnit::setDetectionFrameInterval(int interval) {
+    detectionFrameInterval_ = (interval > 0) ? interval : 1; // Ensure positive interval
+    detectionFrameCounter_ = 0; // Reset counter
+    std::cout << "Control Unit: Detection frame interval set to " << detectionFrameInterval_ << std::endl;
+}
+
+void ControlUnit::setTrackingFrameInterval(int interval) {
+    trackingFrameInterval_ = (interval > 0) ? interval : 1; // Ensure positive interval
+    trackingFrameCounter_ = 0; // Reset counter
+    std::cout << "Control Unit: Tracking frame interval set to " << trackingFrameInterval_ << std::endl;
+}
+
+bool ControlUnit::shouldDetect() const {
+    int counter = detectionFrameCounter_++;
+    return (counter % detectionFrameInterval_ == 0);
+}
+
+bool ControlUnit::shouldTrack() const {
+    int counter = trackingFrameCounter_++;
+    return (counter % trackingFrameInterval_ == 0);
 }
