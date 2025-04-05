@@ -36,14 +36,14 @@ ControlUnit::Action ControlUnit::decideAction(SingleObjectData& sharedData, bool
 }
 
 void ControlUnit::setDetectionFrameInterval(int interval) {
-    detectionFrameInterval_ = (interval > 0) ? interval : 1; // Ensure positive interval
-    detectionFrameCounter_ = 0; // Reset counter
+    detectionFrameInterval_ = (interval > 0) ? interval : 1;
+    detectionFrameCounter_ = 0;
     std::cout << "Control Unit: Detection frame interval set to " << detectionFrameInterval_ << std::endl;
 }
 
 void ControlUnit::setTrackingFrameInterval(int interval) {
-    trackingFrameInterval_ = (interval > 0) ? interval : 1; // Ensure positive interval
-    trackingFrameCounter_ = 0; // Reset counter
+    trackingFrameInterval_ = (interval > 0) ? interval : 1;
+    trackingFrameCounter_ = 0;
     std::cout << "Control Unit: Tracking frame interval set to " << trackingFrameInterval_ << std::endl;
 }
 

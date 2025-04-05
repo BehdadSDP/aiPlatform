@@ -28,7 +28,8 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
             continue;
         }
 
-        if (controlUnit.shouldDetect()) {
+        // Check mode before processing
+        if (controlUnit.getDetectionMode() == ControlUnit::Mode::RUN && controlUnit.shouldDetect()) {
             std::vector<model::Detection> detections = yoloDetector.detect(frame);
 
             float bestConf = -1.0f;
@@ -51,6 +52,7 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
                 sharedData.detection.frameSeq = frameData.sequence;
             }
         }
+        // In STANDBY, do nothing but keep looping
     }
 }
 
@@ -59,8 +61,8 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
     std::string vitModelPath = "/home/pi5/ai_platform/aiPlatform/models/object_tracking_vittrack_2023sep.onnx";
     std::unique_ptr<VitTracker> tracker;
     bool isTracking = false;
-    int framesWithoutDetection = 0; // Counter for frames without valid YOLO detection
-    const int maxFramesWithoutDetection = 30; // Threshold to stop tracking (adjustable)
+    int framesWithoutDetection = 0;
+    const int maxFramesWithoutDetection = 30;
 
     while (running) {
         FrameBufferManager::getInstance().waitForNewFrame();
@@ -74,7 +76,8 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
             continue;
         }
 
-        if (controlUnit.shouldTrack()) {
+        // Check mode before processing
+        if (controlUnit.getTrackingMode() == ControlUnit::Mode::RUN && controlUnit.shouldTrack()) {
             cv::Rect lastTrackBox;
             bool trackerValid = false;
 
@@ -86,42 +89,41 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
             ControlUnit::Action action = controlUnit.decideAction(sharedData, isTracking, lastTrackBox);
 
             switch (action) {
-            case ControlUnit::Action::INITIALIZE: {
-                cv::Rect yoloBox;
-                {
-                    std::lock_guard<std::mutex> lock(sharedData.mtx);
-                    yoloBox = sharedData.detection.box;
+                case ControlUnit::Action::INITIALIZE: {
+                    cv::Rect yoloBox;
+                    {
+                        std::lock_guard<std::mutex> lock(sharedData.mtx);
+                        yoloBox = sharedData.detection.box;
+                    }
+                    tracker = std::make_unique<VitTracker>(vitModelPath);
+                    tracker->init(frame, yoloBox);
+                    isTracking = true;
+                    framesWithoutDetection = 0;
+                    break;
                 }
-                tracker = std::make_unique<VitTracker>(vitModelPath);
-                tracker->init(frame, yoloBox);
-                isTracking = true;
-                framesWithoutDetection = 0;
-                break;
-            }
-            case ControlUnit::Action::REINITIALIZE: {
-                cv::Rect yoloBox;
-                {
-                    std::lock_guard<std::mutex> lock(sharedData.mtx);
-                    yoloBox = sharedData.detection.box;
+                case ControlUnit::Action::REINITIALIZE: {
+                    cv::Rect yoloBox;
+                    {
+                        std::lock_guard<std::mutex> lock(sharedData.mtx);
+                        yoloBox = sharedData.detection.box;
+                    }
+                    tracker->init(frame, yoloBox);
+                    isTracking = true;
+                    framesWithoutDetection = 0;
+                    break;
                 }
-                tracker->init(frame, yoloBox);
-                isTracking = true;
-                framesWithoutDetection = 0;
-                break;
-            }
-            case ControlUnit::Action::CONTINUE:
-                if (!trackerValid) {
+                case ControlUnit::Action::CONTINUE:
+                    if (!trackerValid) {
+                        isTracking = false;
+                        tracker.reset();
+                    }
+                    break;
+                case ControlUnit::Action::STOP:
                     isTracking = false;
                     tracker.reset();
-                }
-                break;
-            case ControlUnit::Action::STOP:
-                isTracking = false;
-                tracker.reset();
-                break;
+                    break;
             }
 
-            // Check if YOLO detection is still valid
             bool yoloValid = false;
             {
                 std::lock_guard<std::mutex> lock(sharedData.mtx);
@@ -136,16 +138,20 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
                     std::cout << "Tracker stopped: No detection for " << maxFramesWithoutDetection << " frames" << std::endl;
                 }
             } else if (yoloValid) {
-                framesWithoutDetection = 0; // Reset counter when detection is valid
+                framesWithoutDetection = 0;
             }
 
-            // Draw only if tracking is valid
             if (isTracking && trackerValid) {
                 cv::rectangle(frame, lastTrackBox, cv::Scalar(0,0,255), 2);
                 cv::putText(frame, "Tracking", lastTrackBox.tl(),
                             cv::FONT_HERSHEY_SIMPLEX, 0.6,
                             cv::Scalar(0,0,255), 2);
             }
+        } else {
+            // In STANDBY, reset tracking state and skip processing
+            isTracking = false;
+            tracker.reset();
+            framesWithoutDetection = 0;
         }
 
         cv::imshow("Tracker Thread View", frame);
@@ -170,15 +176,31 @@ int main()
         cameraHandler.acquireCamera();
         cameraHandler.configureCamera();
 
-        int detectionInterval;
-        std::cout << "Enter frame interval for detection (e.g., 10 for every 10th frame): ";
-        std::cin >> detectionInterval;
-        controlUnit.setDetectionFrameInterval(detectionInterval);
+        // Prompt for detection mode and interval
+        std::cout << "Select Detection Mode:\n0: RUN\n1: STANDBY\nEnter choice (0-1): ";
+        int detectionChoice;
+        std::cin >> detectionChoice;
+        controlUnit.setDetectionMode(static_cast<ControlUnit::Mode>(detectionChoice));
 
-        int trackingInterval;
-        std::cout << "Enter frame interval for tracking (e.g., 5 for every 5th frame): ";
-        std::cin >> trackingInterval;
-        controlUnit.setTrackingFrameInterval(trackingInterval);
+        int detectionInterval = 1;
+        if (detectionChoice == 0) {
+            std::cout << "Enter frame interval for detection (e.g., 10 for every 10th frame): ";
+            std::cin >> detectionInterval;
+            controlUnit.setDetectionFrameInterval(detectionInterval);
+        }
+
+        // Prompt for tracking mode and interval
+        std::cout << "Select Tracking Mode:\n0: RUN\n1: STANDBY\nEnter choice (0-1): ";
+        int trackingChoice;
+        std::cin >> trackingChoice;
+        controlUnit.setTrackingMode(static_cast<ControlUnit::Mode>(trackingChoice));
+
+        int trackingInterval = 1;
+        if (trackingChoice == 0) {
+            std::cout << "Enter frame interval for tracking (e.g., 5 for every 5th frame): ";
+            std::cin >> trackingInterval;
+            controlUnit.setTrackingFrameInterval(trackingInterval);
+        }
 
         SingleObjectData singleObjData;
         {

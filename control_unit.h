@@ -19,26 +19,23 @@ public:
         STANDBY   // Threads run, no processing
     };
 
-    // Existing decision method
     Action decideAction(SingleObjectData& sharedData, bool isTracking, const cv::Rect& lastTrackBox) const;
 
-    // New methods for frame speed control
     void setDetectionFrameInterval(int interval);
     void setTrackingFrameInterval(int interval);
-    bool shouldDetect() const;
-    bool shouldTrack() const;
+    bool shouldDetect() const; // No mode check here
+    bool shouldTrack() const;  // No mode check here
 
-    // New methods for mode control
     void setDetectionMode(Mode mode);
     void setTrackingMode(Mode mode);
     Mode getDetectionMode() const { return detectionMode_; }
     Mode getTrackingMode() const { return trackingMode_; }
 
 private:
-    std::atomic<Mode> detectionMode_{Mode::RUN}; // Default to RUN
-    std::atomic<Mode> trackingMode_{Mode::RUN};  // Default to RUN
-    std::atomic<int> detectionFrameInterval_{1}; // Default: process every frame
-    std::atomic<int> trackingFrameInterval_{1};  // Default: process every frame
-    mutable std::atomic<int> detectionFrameCounter_{0}; // Counter for detection
-    mutable std::atomic<int> trackingFrameCounter_{0};  // Counter for tracking
+    std::atomic<Mode> detectionMode_{Mode::RUN};
+    std::atomic<Mode> trackingMode_{Mode::RUN};
+    std::atomic<int> detectionFrameInterval_{1};
+    std::atomic<int> trackingFrameInterval_{1};
+    mutable std::atomic<int> detectionFrameCounter_{0};
+    mutable std::atomic<int> trackingFrameCounter_{0};
 };
