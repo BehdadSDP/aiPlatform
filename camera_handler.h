@@ -16,6 +16,7 @@
 #include <opencv4/opencv2/opencv.hpp>
 #include "model.h"
 #include "frame_buffer_manager.h"
+#include "control_unit.h" // Include ControlUnit
 
 using namespace libcamera;
 
@@ -27,8 +28,10 @@ public:
 
 class CameraHandler {
 public:
-    CameraHandler()
+    // Updated constructor to take ControlUnit reference
+    CameraHandler(ControlUnit& controlUnit)
         : cm_(std::make_unique<CameraManager>()), camera_(nullptr), stream_(nullptr),
+          controlUnit_(controlUnit), // Store reference
           lastFrameTime_(std::chrono::steady_clock::now()), frameCount_(0), fps_(0.0),
           frameDuration_(0) {}
 
@@ -70,6 +73,7 @@ private:
     std::unique_ptr<CameraManager> cm_;
     std::shared_ptr<Camera> camera_;
     Stream* stream_ = nullptr;
+    ControlUnit& controlUnit_; // Reference to ControlUnit
 
     std::mutex mutex_;
     std::condition_variable condition_;

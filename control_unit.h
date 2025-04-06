@@ -15,27 +15,31 @@ public:
     };
 
     enum class Mode {
-        RUN,      // Process every N frames
-        STANDBY   // Threads run, no processing
+        RUN,
+        STANDBY
     };
 
     Action decideAction(SingleObjectData& sharedData, bool isTracking, const cv::Rect& lastTrackBox) const;
 
     void setDetectionFrameInterval(int interval);
     void setTrackingFrameInterval(int interval);
-    bool shouldDetect() const; // No mode check here
-    bool shouldTrack() const;  // No mode check here
+    bool shouldDetect() const; // No increment here
+    bool shouldTrack() const;  // No increment here
 
     void setDetectionMode(Mode mode);
     void setTrackingMode(Mode mode);
     Mode getDetectionMode() const { return detectionMode_; }
     Mode getTrackingMode() const { return trackingMode_; }
 
+    // Allow CameraHandler to increment counters
+    void incrementDetectionFrameCounter() { detectionFrameCounter_++; }
+    void incrementTrackingFrameCounter() { trackingFrameCounter_++; }
+
 private:
     std::atomic<Mode> detectionMode_{Mode::RUN};
     std::atomic<Mode> trackingMode_{Mode::RUN};
     std::atomic<int> detectionFrameInterval_{1};
     std::atomic<int> trackingFrameInterval_{1};
-    mutable std::atomic<int> detectionFrameCounter_{0};
-    mutable std::atomic<int> trackingFrameCounter_{0};
+    std::atomic<int> detectionFrameCounter_{0}; // No longer mutable, incremented externally
+    std::atomic<int> trackingFrameCounter_{0};  // Already updated from previous change
 };

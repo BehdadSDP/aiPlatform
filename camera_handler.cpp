@@ -260,7 +260,7 @@ void CameraHandler::requestComplete(Request* request) {
 
         // Create FrameData object
         FrameData frameData;
-        frameData.image = rawFrame.clone(); // Deep copy to store in buffer
+        frameData.image = rawFrame.clone();
         frameData.timestamp = metadata.timestamp;
         frameData.sequence = metadata.sequence;
         frameData.format = config.pixelFormat.toString();
@@ -270,11 +270,9 @@ void CameraHandler::requestComplete(Request* request) {
         // Add to buffer
         FrameBufferManager::getInstance().addFrame(frameData);
 
-//        std::cout << " | Frame seq: " << frameData.sequence << std::endl;
-//                  << " | Format: " << frameData.format
-//                  << " | Size: " << frameData.size.width << "x" << frameData.size.height
-//                  << " | FPS: " << std::fixed << std::setprecision(2) << frameData.fps
-//                  << " | Timestamp: " << frameData.timestamp << " ns" << std::endl;
+        // Increment both counters here
+        controlUnit_.incrementDetectionFrameCounter();
+        controlUnit_.incrementTrackingFrameCounter();
 
         munmap(mappedData, length);
     }

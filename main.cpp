@@ -17,13 +17,12 @@ void signalHandler(int) { if (g_running) g_running->store(false); }
 void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit)
 {
     while (running) {
-        // Only wait for a new frame if we're in RUN mode and ready to detect
         if (controlUnit.getDetectionMode() == ControlUnit::Mode::RUN && controlUnit.shouldDetect()) {
             FrameBufferManager::getInstance().waitForNewFrame();
 
             FrameData frameData;
             if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Avoid busy-waiting
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             cv::Mat frame = frameData.image;
@@ -31,7 +30,6 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
                 continue;
             }
 
-            // Perform YOLO detection
             std::vector<model::Detection> detections = yoloDetector.detect(frame);
 
             float bestConf = -1.0f;
@@ -48,15 +46,19 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
                 if (bestConf > CONF_THRESHOLD) {
                     sharedData.detection.box = bestBox;
                     sharedData.detection.valid = true;
+                    sharedData.detection.frame = frame.clone(); // Save a deep copy of the frame
+                    sharedData.detection.frameSeq = frameData.sequence;
+                    sharedData.detection.newDetection = true; // Optional, if using previous mod
                     std::cout << "YOLO detection: Box = " << bestBox << ", Confidence = " << bestConf << std::endl;
                 } else {
                     sharedData.detection.valid = false;
+                    sharedData.detection.newDetection = false; // Optional
+                    sharedData.detection.frame.release(); // Clear frame if no detection
                     std::cout << "YOLO detection: No valid detection (best confidence = " << bestConf << ")" << std::endl;
                 }
-                sharedData.detection.frameSeq = frameData.sequence;
             }
+            sharedData.cv.notify_one(); // Notify tracker (optional, from previous mod)
         } else {
-            // In STANDBY or when skipping frames, sleep to reduce CPU usage
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
@@ -110,7 +112,7 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
                             yoloBox = sharedData.detection.box;
                         }
                         tracker = std::make_unique<VitTracker>(vitModelPath);
-                        tracker->init(frame, yoloBox);
+                        tracker->init(sharedData.detection.frame , yoloBox);
                         isTracking = true;
                         framesWithoutDetection = 0;
                         std::cout << "Tracker initialized with YOLO box: " << yoloBox << std::endl;
@@ -122,7 +124,7 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
                             std::lock_guard<std::mutex> lock(sharedData.mtx);
                             yoloBox = sharedData.detection.box;
                         }
-                        tracker->init(frame, yoloBox);
+                        tracker->init(sharedData.detection.frame, yoloBox);
                         isTracking = true;
                         framesWithoutDetection = 0;
                         std::cout << "Tracker reinitialized with YOLO box: " << yoloBox << std::endl;
@@ -189,13 +191,13 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
 int main()
 {
     try {
-        CameraHandler cameraHandler;
+        ControlUnit controlUnit;
+        CameraHandler cameraHandler(controlUnit); // Pass ControlUnit to CameraHandler
         model yoloDetector("/home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.cfg",
                            "/home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.weights",
                            "/home/pi5/ai_platform/aiPlatform/models/coco.names");
 
         std::atomic<bool> running(true);
-        ControlUnit controlUnit;
         g_running = &running;
         signal(SIGINT, signalHandler);
 
