@@ -124,34 +124,29 @@ void CameraHandler::applyConfiguration(std::unique_ptr<CameraConfiguration>& con
     stream_ = config->at(0).stream();
 }
 
-void CameraHandler::configureCamera() {
+void CameraHandler::configureCamera(int resolutionIndex, int customWidth, int customHeight) {
     if (!camera_) throw CameraException("Camera not acquired yet. Call acquireCamera() first.");
     auto config = camera_->generateConfiguration({StreamRole::Viewfinder});
-    if (!config) throw CameraException("Failed to generate configuration for Raw role.");
+    if (!config) throw CameraException("Failed to generate configuration for Viewfinder role.");
     StreamConfiguration& streamConfig = config->at(0);
     printMessage("Default configuration: " + streamConfig.toString());
 
     const StreamFormats& streamFormats = streamConfig.formats();
     auto options = generateConfigOptions(streamConfig, streamFormats, config);
     size_t customIndex = options.size();
-    displayOptionsSummary(options, customIndex);
-    size_t choice = getUserInput<size_t>("", 0, "Invalid choice: ");
-    std::vector<PixelFormat> validFormats = {formats::RGB888};
 
-    if (choice == customIndex) {
-        configureManualResolution(streamConfig, validFormats);
-    } else if (choice < options.size()) {
-        streamConfig.size = options[choice].first;
-        streamConfig.pixelFormat = options[choice].second;
+    if (resolutionIndex == static_cast<int>(customIndex)) {
+        printMessage("Attempting custom resolution: " + std::to_string(customWidth) + "x" + std::to_string(customHeight));
+        streamConfig.size = Size{static_cast<unsigned int>(customWidth), static_cast<unsigned int>(customHeight)};
+        streamConfig.pixelFormat = formats::RGB888;
+    } else if (resolutionIndex >= 0 && resolutionIndex < static_cast<int>(options.size())) {
+        streamConfig.size = options[resolutionIndex].first;
+        streamConfig.pixelFormat = options[resolutionIndex].second;
     } else {
-        throw CameraException("Choice out of range: " + std::to_string(choice));
+        throw CameraException("Invalid resolution index: " + std::to_string(resolutionIndex));
     }
 
     applyConfiguration(config, streamConfig);
-
-    float targetFps = getUserInput<float>("Enter desired frame rate (FPS): ", 1.0f,
-                                          "Invalid frame rate: must be positive: ");
-    setFrameRate(targetFps);
 }
 
 void CameraHandler::setFrameRate(float targetFps) {

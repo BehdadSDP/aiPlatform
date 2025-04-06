@@ -1,0 +1,13 @@
+# Camera settings
+camera_resolution_index=0
+custom_width=1332
+custom_height=990
+frame_rate=20
+
+# Detection settings
+detection_mode=0
+detection_interval=50
+
+# Tracking settings
+tracking_mode=0
+tracking_interval=20

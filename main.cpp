@@ -8,14 +8,48 @@
 #include <atomic>
 #include <iostream>
 #include <csignal>
+#include <fstream>
+#include <sstream>
+#include <map>
 
 static constexpr float CONF_THRESHOLD = 0.5f;
 
 std::atomic<bool>* g_running = nullptr;
 void signalHandler(int) { if (g_running) g_running->store(false); }
 
-void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit)
-{
+// Function to trim whitespace from strings
+std::string trim(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t");
+    return str.substr(first, last - first + 1);
+}
+
+// Function to load configuration from file
+std::map<std::string, std::string> loadConfig(const std::string& filename) {
+    std::map<std::string, std::string> config;
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open config file: " + filename);
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        line = trim(line);
+        if (line.empty() || line[0] == '#') continue;
+
+        size_t delimiterPos = line.find('=');
+        if (delimiterPos == std::string::npos) continue;
+
+        std::string key = trim(line.substr(0, delimiterPos));
+        std::string value = trim(line.substr(delimiterPos + 1));
+        config[key] = value;
+    }
+    file.close();
+    return config;
+}
+
+void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit) {
     while (running) {
         if (controlUnit.getDetectionMode() == ControlUnit::Mode::RUN && controlUnit.shouldDetect()) {
             FrameBufferManager::getInstance().waitForNewFrame();
@@ -33,7 +67,7 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
             std::vector<model::Detection> detections = yoloDetector.detect(frame);
 
             float bestConf = -1.0f;
-            cv::Rect bestBox;
+            cv::Rect bestBox; // Fixed: Removed invalid '>' character
             for (const auto &det : detections) {
                 if (det.confidence > bestConf) {
                     bestConf = det.confidence;
@@ -46,41 +80,39 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
                 if (bestConf > CONF_THRESHOLD) {
                     sharedData.detection.box = bestBox;
                     sharedData.detection.valid = true;
-                    sharedData.detection.frame = frame.clone(); // Save a deep copy of the frame
+                    sharedData.detection.frame = frame.clone();
                     sharedData.detection.frameSeq = frameData.sequence;
-                    sharedData.detection.newDetection = true; // Optional, if using previous mod
+                    sharedData.detection.newDetection = true;
                     std::cout << "YOLO detection: Box = " << bestBox << ", Confidence = " << bestConf << std::endl;
                 } else {
                     sharedData.detection.valid = false;
-                    sharedData.detection.newDetection = false; // Optional
-                    sharedData.detection.frame.release(); // Clear frame if no detection
+                    sharedData.detection.newDetection = false;
+                    sharedData.detection.frame.release();
                     std::cout << "YOLO detection: No valid detection (best confidence = " << bestConf << ")" << std::endl;
                 }
             }
-            sharedData.cv.notify_one(); // Notify tracker (optional, from previous mod)
+            sharedData.cv.notify_one();
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
 }
 
-void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit)
-{
+void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit) {
     const std::string vitModelPath = "/home/pi5/ai_platform/aiPlatform/models/object_tracking_vittrack_2023sep.onnx";
     std::unique_ptr<VitTracker> tracker;
     bool isTracking = false;
     int framesWithoutDetection = 0;
     const int maxFramesWithoutDetection = 30;
-    cv::Rect lastTrackBox; // Store the last valid tracking box
+    cv::Rect lastTrackBox;
 
     while (running) {
-        // Only wait for a new frame if we're in RUN mode or need to display
         if (controlUnit.getTrackingMode() == ControlUnit::Mode::RUN || isTracking) {
             FrameBufferManager::getInstance().waitForNewFrame();
 
             FrameData frameData;
             if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10)); // Avoid busy-waiting
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             cv::Mat frame = frameData.image;
@@ -88,19 +120,15 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
                 continue;
             }
 
-            // Tracker logic when in RUN mode
             if (controlUnit.getTrackingMode() == ControlUnit::Mode::RUN) {
                 bool trackerValid = false;
 
-                // Update tracker every frame if tracking
                 if (tracker && isTracking) {
                     lastTrackBox = tracker->update(frame);
                     trackerValid = lastTrackBox.width > 0 && lastTrackBox.height > 0 && tracker->isInitialized();
-                    // Debug output to verify tracker state
                     std::cout << "Tracker updated: " << lastTrackBox << ", Valid: " << trackerValid << std::endl;
                 }
 
-                // Decide action only on specified interval
                 if (controlUnit.shouldTrack()) {
                     ControlUnit::Action action = controlUnit.decideAction(sharedData, isTracking, lastTrackBox);
 
@@ -112,7 +140,7 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
                             yoloBox = sharedData.detection.box;
                         }
                         tracker = std::make_unique<VitTracker>(vitModelPath);
-                        tracker->init(sharedData.detection.frame , yoloBox);
+                        tracker->init(sharedData.detection.frame, yoloBox);
                         isTracking = true;
                         framesWithoutDetection = 0;
                         std::cout << "Tracker initialized with YOLO box: " << yoloBox << std::endl;
@@ -145,7 +173,6 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
                     }
                 }
 
-                // Handle frames without detection
                 bool yoloValid = false;
                 {
                     std::lock_guard<std::mutex> lock(sharedData.mtx);
@@ -162,37 +189,31 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Con
                     framesWithoutDetection = 0;
                 }
 
-                // Draw bounding box every frame if tracking is active and valid
                 if (isTracking && trackerValid) {
                     cv::rectangle(frame, lastTrackBox, cv::Scalar(0, 0, 255), 2);
                     cv::putText(frame, "Tracking", lastTrackBox.tl(),
                                 cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 255), 2);
                 }
             } else {
-                // In STANDBY mode, reset tracking state
                 isTracking = false;
                 tracker.reset();
                 framesWithoutDetection = 0;
             }
 
-            // Display the frame
             cv::imshow("Tracker Thread View", frame);
             cv::waitKey(1);
         } else {
-            // Sleep when not processing to reduce CPU usage
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
 
-    // Cleanup
     cv::destroyWindow("Tracker Thread View");
 }
 
-int main()
-{
+int main() {
     try {
         ControlUnit controlUnit;
-        CameraHandler cameraHandler(controlUnit); // Pass ControlUnit to CameraHandler
+        CameraHandler cameraHandler(controlUnit);
         model yoloDetector("/home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.cfg",
                            "/home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.weights",
                            "/home/pi5/ai_platform/aiPlatform/models/coco.names");
@@ -203,33 +224,36 @@ int main()
 
         cameraHandler.initialize();
         cameraHandler.acquireCamera();
-        cameraHandler.configureCamera();
 
-        // Prompt for detection mode and interval
-        std::cout << "Select Detection Mode:\n0: RUN\n1: STANDBY\nEnter choice (0-1): ";
-        int detectionChoice;
-        std::cin >> detectionChoice;
-        controlUnit.setDetectionMode(static_cast<ControlUnit::Mode>(detectionChoice));
+        // Load configuration
+        auto config = loadConfig("/home/pi5/ai_platform/aiPlatform/config.txt");
 
-        int detectionInterval = 1;
-        if (detectionChoice == 0) {
-            std::cout << "Enter frame interval for detection (e.g., 10 for every 10th frame): ";
-            std::cin >> detectionInterval;
-            controlUnit.setDetectionFrameInterval(detectionInterval);
-        }
+        // Check for required config keys and set defaults if missing
+        if (config.find("camera_resolution_index") == config.end()) throw std::runtime_error("Missing 'camera_resolution_index' in config");
+        if (config.find("frame_rate") == config.end()) throw std::runtime_error("Missing 'frame_rate' in config");
+        if (config.find("detection_mode") == config.end()) throw std::runtime_error("Missing 'detection_mode' in config");
+        if (config.find("detection_interval") == config.end()) throw std::runtime_error("Missing 'detection_interval' in config");
+        if (config.find("tracking_mode") == config.end()) throw std::runtime_error("Missing 'tracking_mode' in config");
+        if (config.find("tracking_interval") == config.end()) throw std::runtime_error("Missing 'tracking_interval' in config");
 
-        // Prompt for tracking mode and interval
-        std::cout << "Select Tracking Mode:\n0: RUN\n1: STANDBY\nEnter choice (0-1): ";
-        int trackingChoice;
-        std::cin >> trackingChoice;
-        controlUnit.setTrackingMode(static_cast<ControlUnit::Mode>(trackingChoice));
+        int resolutionIndex = std::stoi(config["camera_resolution_index"]);
+        int customWidth = config.find("custom_width") != config.end() ? std::stoi(config["custom_width"]) : 0;
+        int customHeight = config.find("custom_height") != config.end() ? std::stoi(config["custom_height"]) : 0;
+        float frameRate = std::stof(config["frame_rate"]);
+        int detectionMode = std::stoi(config["detection_mode"]);
+        int detectionInterval = std::stoi(config["detection_interval"]);
+        int trackingMode = std::stoi(config["tracking_mode"]);
+        int trackingInterval = std::stoi(config["tracking_interval"]);
 
-        int trackingInterval = 1;
-        if (trackingChoice == 0) {
-            std::cout << "Enter frame interval for tracking (e.g., 5 for every 5th frame): ";
-            std::cin >> trackingInterval;
-            controlUnit.setTrackingFrameInterval(trackingInterval);
-        }
+        // Configure camera with loaded settings
+        cameraHandler.configureCamera(resolutionIndex, customWidth, customHeight);
+        cameraHandler.setFrameRate(frameRate);
+
+        // Configure detection and tracking
+        controlUnit.setDetectionMode(static_cast<ControlUnit::Mode>(detectionMode));
+        controlUnit.setDetectionFrameInterval(detectionInterval);
+        controlUnit.setTrackingMode(static_cast<ControlUnit::Mode>(trackingMode));
+        controlUnit.setTrackingFrameInterval(trackingInterval);
 
         SingleObjectData singleObjData;
         {

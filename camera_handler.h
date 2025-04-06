@@ -56,8 +56,7 @@ public:
     void applyConfiguration(std::unique_ptr<CameraConfiguration>& config,
                             StreamConfiguration& streamConfig);
 
-    void configureCamera();
-    void setFrameRate(float targetFps);
+    void configureCamera(int resolutionIndex, int customWidth = 0, int customHeight = 0);    void setFrameRate(float targetFps);
 
     void cleanup();
     void startStreaming();
