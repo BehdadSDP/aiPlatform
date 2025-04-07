@@ -7,6 +7,7 @@ frame_rate=20
 # Detection settings
 detection_mode=0
 detection_interval=50
+# Using YOLOv12m ONNX model for detection
 
 # Tracking settings
 tracking_mode=0

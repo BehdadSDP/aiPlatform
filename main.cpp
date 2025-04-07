@@ -214,8 +214,7 @@ int main() {
     try {
         ControlUnit controlUnit;
         CameraHandler cameraHandler(controlUnit);
-        model yoloDetector("/home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.cfg",
-                           "/home/pi5/ai_platform/aiPlatform/models/yolov4-tiny.weights",
+        model yoloDetector("/home/pi5/ai_platform/aiPlatform/models/yolo12m.onnx",
                            "/home/pi5/ai_platform/aiPlatform/models/coco.names");
 
         std::atomic<bool> running(true);

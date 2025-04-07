@@ -2,7 +2,12 @@
 #include <stdexcept>
 #include <iomanip>
 
-// Constructor (unchanged)
+// Default constructor
+model::model() : isOnnxModel_(false) {
+    // Initialize with empty model
+}
+
+// Constructor for Darknet models (YOLOv4)
 model::model(const std::string &configPath,
              const std::string &weightsPath,
              const std::string &namesPath)
@@ -13,6 +18,29 @@ model::model(const std::string &configPath,
     }
     yoloNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
     yoloNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+    isOnnxModel_ = false;
+
+    std::ifstream classFile(namesPath);
+    if (!classFile.is_open()) {
+        throw std::runtime_error("Failed to open class names file: " + namesPath);
+    }
+    std::string line;
+    while (std::getline(classFile, line)) {
+        classNames_.push_back(line);
+    }
+    classFile.close();
+}
+
+// Constructor for ONNX models (YOLOv12m)
+model::model(const std::string &onnxPath, const std::string &namesPath)
+{
+    yoloNet_ = cv::dnn::readNetFromONNX(onnxPath);
+    if (yoloNet_.empty()) {
+        throw std::runtime_error("Failed to load ONNX model from " + onnxPath);
+    }
+    yoloNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+    yoloNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+    isOnnxModel_ = true;
 
     std::ifstream classFile(namesPath);
     if (!classFile.is_open()) {
@@ -50,24 +78,59 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
     std::vector<float> confidences;
     std::vector<cv::Rect> boxes;
 
-    for (auto &out : outs) {
-        float* data = (float*) out.data;
-        for (int j = 0; j < out.rows; ++j, data += out.cols) {
-            cv::Mat scores = out.row(j).colRange(5, out.cols);
-            cv::Point classIdPoint;
-            double confidence;
-            cv::minMaxLoc(scores, 0, &confidence, 0, &classIdPoint);
-            if (confidence > confThreshold && classIdPoint.x == 0) { // Filter for "person" (class ID 0)
-                int centerX = (int)(data[0] * frame.cols);
-                int centerY = (int)(data[1] * frame.rows);
-                int width   = (int)(data[2] * frame.cols);
-                int height  = (int)(data[3] * frame.rows);
-                int left    = centerX - width / 2;
-                int top     = centerY - height / 2;
+    if (isOnnxModel_) {
+        // ONNX model output processing (YOLOv12m)
+        // ONNX models typically output in a different format
+        for (auto &out : outs) {
+            float* data = (float*) out.data;
+            // ONNX output format: [batch, num_detections, 7]
+            // where 7 = [x, y, w, h, confidence, class_id, class_score]
+            int rows = out.rows;
+            int cols = out.cols;
+            
+            for (int i = 0; i < rows; i++) {
+                float confidence = data[i * cols + 4];
+                if (confidence > confThreshold) {
+                    int classId = static_cast<int>(data[i * cols + 5]);
+                    if (classId == 0) { // Filter for "person" (class ID 0)
+                        float x = data[i * cols];
+                        float y = data[i * cols + 1];
+                        float w = data[i * cols + 2];
+                        float h = data[i * cols + 3];
+                        
+                        int left = static_cast<int>((x - w/2) * frame.cols);
+                        int top = static_cast<int>((y - h/2) * frame.rows);
+                        int width = static_cast<int>(w * frame.cols);
+                        int height = static_cast<int>(h * frame.rows);
+                        
+                        classIds.push_back(classId);
+                        confidences.push_back(confidence);
+                        boxes.push_back(cv::Rect(left, top, width, height));
+                    }
+                }
+            }
+        }
+    } else {
+        // Darknet model output processing (YOLOv4)
+        for (auto &out : outs) {
+            float* data = (float*) out.data;
+            for (int j = 0; j < out.rows; ++j, data += out.cols) {
+                cv::Mat scores = out.row(j).colRange(5, out.cols);
+                cv::Point classIdPoint;
+                double confidence;
+                cv::minMaxLoc(scores, 0, &confidence, 0, &classIdPoint);
+                if (confidence > confThreshold && classIdPoint.x == 0) { // Filter for "person" (class ID 0)
+                    int centerX = (int)(data[0] * frame.cols);
+                    int centerY = (int)(data[1] * frame.rows);
+                    int width   = (int)(data[2] * frame.cols);
+                    int height  = (int)(data[3] * frame.rows);
+                    int left    = centerX - width / 2;
+                    int top     = centerY - height / 2;
 
-                classIds.push_back(classIdPoint.x);
-                confidences.push_back((float)confidence);
-                boxes.push_back(cv::Rect(left, top, width, height));
+                    classIds.push_back(classIdPoint.x);
+                    confidences.push_back((float)confidence);
+                    boxes.push_back(cv::Rect(left, top, width, height));
+                }
             }
         }
     }
@@ -88,4 +151,23 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
     }
 
     return detections;
+}
+
+void model::detectAndDisplay(std::vector<cv::Mat>& frames) {
+    for (auto& frame : frames) {
+        std::vector<Detection> detections = detect(frame);
+        
+        // Draw detections on the frame
+        for (const auto& det : detections) {
+            cv::rectangle(frame, det.box, cv::Scalar(0, 255, 0), 2);
+            std::string label = classNames_.empty() ? "Person" : classNames_[det.classId];
+            label += " " + std::to_string(static_cast<int>(det.confidence * 100)) + "%";
+            cv::putText(frame, label, cv::Point(det.box.x, det.box.y - 10),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 2);
+        }
+    }
+}
+
+void model::printMessage(const std::string& message) const {
+    std::cout << message << std::endl;
 }
