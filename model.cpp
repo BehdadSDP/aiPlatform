@@ -78,7 +78,7 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
         yoloNet_.forward(outs, layerNames);
 
         // Post-process
-        float confThreshold = 0.5;
+        float confThreshold = 0.3; // Lowered from 0.5 to detect more objects
         float nmsThreshold = 0.4;
         std::vector<int> classIds;
         std::vector<float> confidences;
@@ -86,8 +86,7 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
 
         if (isOnnxModel_) {
             // ONNX model output processing (YOLOv12m)
-            // YOLOv12m typically outputs in format [batch, num_detections, 85]
-            // where 85 = [x, y, w, h, confidence, 80 class scores]
+            std::cout << "Processing ONNX model output..." << std::endl;
             
             for (auto &out : outs) {
                 float* data = (float*) out.data;
@@ -96,11 +95,57 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
                 
                 // Print output shape for debugging
                 std::cout << "ONNX output shape: " << out.size << std::endl;
+                std::cout << "ONNX output rows: " << rows << ", cols: " << cols << std::endl;
                 
-                // Process each detection
-                for (int i = 0; i < rows; i++) {
-                    float confidence = data[i * cols + 4];
-                    if (confidence > confThreshold) {
+                // Check if the output format is [batch, num_detections, 7] (common for newer YOLO models)
+                if (cols == 7) {
+                    std::cout << "Detected [batch, num_detections, 7] format" << std::endl;
+                    // Format: [image_id, x1, y1, x2, y2, confidence, class_id]
+                    for (int i = 0; i < rows; i++) {
+                        float confidence = data[i * cols + 5];
+                        int classId = static_cast<int>(data[i * cols + 6]);
+                        
+                        std::cout << "Detection " << i << ": class=" << classId 
+                                  << ", confidence=" << confidence << std::endl;
+                        
+                        // Check if this is a person class (could be 0 or another index)
+                        bool isPerson = false;
+                        if (classId == 0) {
+                            isPerson = true;
+                        } else if (!classNames_.empty() && classId < classNames_.size()) {
+                            isPerson = (classNames_[classId] == "person");
+                        }
+                        
+                        if (confidence > confThreshold && isPerson) {
+                            // Get bounding box coordinates
+                            float x1 = data[i * cols + 1];
+                            float y1 = data[i * cols + 2];
+                            float x2 = data[i * cols + 3];
+                            float y2 = data[i * cols + 4];
+                            
+                            // Convert normalized coordinates to pixel coordinates
+                            int left = static_cast<int>(x1 * frame.cols);
+                            int top = static_cast<int>(y1 * frame.rows);
+                            int width = static_cast<int>((x2 - x1) * frame.cols);
+                            int height = static_cast<int>((y2 - y1) * frame.rows);
+                            
+                            classIds.push_back(classId);
+                            confidences.push_back(confidence);
+                            boxes.push_back(cv::Rect(left, top, width, height));
+                            
+                            std::cout << "Added person detection: class=" << classId 
+                                      << ", confidence=" << confidence 
+                                      << ", box=" << cv::Rect(left, top, width, height) << std::endl;
+                        }
+                    }
+                } 
+                // Check if the output format is [batch, num_detections, 85] (common for older YOLO models)
+                else if (cols > 5) {
+                    std::cout << "Detected [batch, num_detections, 85] format" << std::endl;
+                    // Process each detection
+                    for (int i = 0; i < rows; i++) {
+                        float confidence = data[i * cols + 4];
+                        
                         // Find the class with highest score
                         float maxClassScore = 0.0f;
                         int maxClassId = 0;
@@ -112,8 +157,19 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
                             }
                         }
                         
-                        // Only process if it's a person (class 0)
+                        std::cout << "Detection " << i << ": class=" << maxClassId 
+                                  << ", confidence=" << confidence 
+                                  << ", maxClassScore=" << maxClassScore << std::endl;
+                        
+                        // Check if this is a person class (could be 0 or another index)
+                        bool isPerson = false;
                         if (maxClassId == 0) {
+                            isPerson = true;
+                        } else if (!classNames_.empty() && maxClassId < classNames_.size()) {
+                            isPerson = (classNames_[maxClassId] == "person");
+                        }
+                        
+                        if (confidence > confThreshold && isPerson) {
                             float x = data[i * cols];
                             float y = data[i * cols + 1];
                             float w = data[i * cols + 2];
@@ -128,8 +184,14 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
                             classIds.push_back(maxClassId);
                             confidences.push_back(confidence);
                             boxes.push_back(cv::Rect(left, top, width, height));
+                            
+                            std::cout << "Added person detection: class=" << maxClassId 
+                                      << ", confidence=" << confidence 
+                                      << ", box=" << cv::Rect(left, top, width, height) << std::endl;
                         }
                     }
+                } else {
+                    std::cout << "Unknown output format with " << cols << " columns" << std::endl;
                 }
             }
         } else {

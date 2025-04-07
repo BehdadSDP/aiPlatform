@@ -12,7 +12,7 @@
 #include <sstream>
 #include <map>
 
-static constexpr float CONF_THRESHOLD = 0.5f;
+static constexpr float CONF_THRESHOLD = 0.3f;
 
 std::atomic<bool>* g_running = nullptr;
 void signalHandler(int) { if (g_running) g_running->store(false); }
@@ -64,11 +64,15 @@ void threadYolo(model& yoloDetector, SingleObjectData& sharedData, std::atomic<b
                 continue;
             }
 
+            std::cout << "Running YOLO detection on frame..." << std::endl;
             std::vector<model::Detection> detections = yoloDetector.detect(frame);
+            std::cout << "YOLO detection found " << detections.size() << " objects" << std::endl;
 
             float bestConf = -1.0f;
-            cv::Rect bestBox; // Fixed: Removed invalid '>' character
+            cv::Rect bestBox;
             for (const auto &det : detections) {
+                std::cout << "Detection: class=" << det.classId << ", confidence=" << det.confidence 
+                          << ", box=" << det.box << std::endl;
                 if (det.confidence > bestConf) {
                     bestConf = det.confidence;
                     bestBox = det.box;
