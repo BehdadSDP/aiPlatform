@@ -49,7 +49,7 @@ std::map<std::string, std::string> loadConfig(const std::string& filename) {
     return config;
 }
 
-void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit) {
+void threadYolo(model& yoloDetector, SingleObjectData& sharedData, std::atomic<bool>& running, ControlUnit& controlUnit) {
     while (running) {
         if (controlUnit.getDetectionMode() == ControlUnit::Mode::RUN && controlUnit.shouldDetect()) {
             FrameBufferManager::getInstance().waitForNewFrame();
@@ -214,8 +214,18 @@ int main() {
     try {
         ControlUnit controlUnit;
         CameraHandler cameraHandler(controlUnit);
-        model yoloDetector("/home/pi5/ai_platform/aiPlatform/models/yolo12m.onnx",
-                           "/home/pi5/ai_platform/aiPlatform/models/coco.names");
+        
+        // Use YOLOv12m ONNX model
+        std::unique_ptr<model> yoloDetector;
+        try {
+            std::cout << "Loading YOLOv12m ONNX model..." << std::endl;
+            yoloDetector = std::make_unique<model>("/home/pi5/ai_platform/aiPlatform/models/yolo12m.onnx",
+                                                  "/home/pi5/ai_platform/aiPlatform/models/coco.names");
+            std::cout << "Successfully loaded YOLOv12m ONNX model" << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to load YOLOv12m ONNX model: " << e.what() << std::endl;
+            throw; // Re-throw the exception to terminate the program
+        }
 
         std::atomic<bool> running(true);
         g_running = &running;
@@ -263,7 +273,7 @@ int main() {
 
         cameraHandler.startStreaming();
 
-        std::thread yoloThread(threadYolo, std::ref(yoloDetector), std::ref(singleObjData), std::ref(running), std::ref(controlUnit));
+        std::thread yoloThread(threadYolo, std::ref(*yoloDetector), std::ref(singleObjData), std::ref(running), std::ref(controlUnit));
         std::thread trackerThread(threadTracker, std::ref(singleObjData), std::ref(running), std::ref(controlUnit));
 
         std::cout << "Streaming... Press Ctrl+C to exit." << std::endl;
