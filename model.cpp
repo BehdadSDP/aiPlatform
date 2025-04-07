@@ -90,20 +90,83 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
             
             for (auto &out : outs) {
                 float* data = (float*) out.data;
-                int rows = out.rows;
-                int cols = out.cols;
                 
                 // Print output shape for debugging
                 std::cout << "ONNX output shape: " << out.size << std::endl;
-                std::cout << "ONNX output rows: " << rows << ", cols: " << cols << std::endl;
                 
+                // Check if the output format is [batch, num_classes+5, num_anchors] (common for newer YOLO models)
+                if (out.size.dims() == 3 && out.size[0] == 1 && out.size[1] > 5 && out.size[2] > 0) {
+                    std::cout << "Detected [batch, num_classes+5, num_anchors] format" << std::endl;
+                    int numClasses = out.size[1] - 5;
+                    int numAnchors = out.size[2];
+                    
+                    std::cout << "Number of classes: " << numClasses << ", Number of anchors: " << numAnchors << std::endl;
+                    
+                    // Process each anchor
+                    for (int i = 0; i < numAnchors; i++) {
+                        // Get confidence score
+                        float confidence = data[4 * numAnchors + i];
+                        
+                        if (confidence > confThreshold) {
+                            // Find the class with highest score
+                            float maxClassScore = 0.0f;
+                            int maxClassId = 0;
+                            
+                            for (int j = 0; j < numClasses; j++) {
+                                float score = data[(j + 5) * numAnchors + i];
+                                if (score > maxClassScore) {
+                                    maxClassScore = score;
+                                    maxClassId = j;
+                                }
+                            }
+                            
+                            // Calculate final confidence
+                            float finalConfidence = confidence * maxClassScore;
+                            
+                            std::cout << "Anchor " << i << ": class=" << maxClassId 
+                                      << ", confidence=" << finalConfidence << std::endl;
+                            
+                            // Check if this is a person class
+                            bool isPerson = false;
+                            if (maxClassId == 0) {
+                                isPerson = true;
+                            } else if (!classNames_.empty() && maxClassId < classNames_.size()) {
+                                isPerson = (classNames_[maxClassId] == "person");
+                            }
+                            
+                            if (finalConfidence > confThreshold && isPerson) {
+                                // Get bounding box coordinates
+                                float x = data[0 * numAnchors + i];
+                                float y = data[1 * numAnchors + i];
+                                float w = data[2 * numAnchors + i];
+                                float h = data[3 * numAnchors + i];
+                                
+                                // Convert normalized coordinates to pixel coordinates
+                                int left = static_cast<int>((x - w/2) * frame.cols);
+                                int top = static_cast<int>((y - h/2) * frame.rows);
+                                int width = static_cast<int>(w * frame.cols);
+                                int height = static_cast<int>(h * frame.rows);
+                                
+                                classIds.push_back(maxClassId);
+                                confidences.push_back(finalConfidence);
+                                boxes.push_back(cv::Rect(left, top, width, height));
+                                
+                                std::cout << "Added person detection: class=" << maxClassId 
+                                          << ", confidence=" << finalConfidence 
+                                          << ", box=" << cv::Rect(left, top, width, height) << std::endl;
+                            }
+                        }
+                    }
+                } 
                 // Check if the output format is [batch, num_detections, 7] (common for newer YOLO models)
-                if (cols == 7) {
+                else if (out.size.dims() == 3 && out.size[0] == 1 && out.size[1] > 0 && out.size[2] == 7) {
                     std::cout << "Detected [batch, num_detections, 7] format" << std::endl;
+                    int numDetections = out.size[1];
+                    
                     // Format: [image_id, x1, y1, x2, y2, confidence, class_id]
-                    for (int i = 0; i < rows; i++) {
-                        float confidence = data[i * cols + 5];
-                        int classId = static_cast<int>(data[i * cols + 6]);
+                    for (int i = 0; i < numDetections; i++) {
+                        float confidence = data[i * 7 + 5];
+                        int classId = static_cast<int>(data[i * 7 + 6]);
                         
                         std::cout << "Detection " << i << ": class=" << classId 
                                   << ", confidence=" << confidence << std::endl;
@@ -118,10 +181,10 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
                         
                         if (confidence > confThreshold && isPerson) {
                             // Get bounding box coordinates
-                            float x1 = data[i * cols + 1];
-                            float y1 = data[i * cols + 2];
-                            float x2 = data[i * cols + 3];
-                            float y2 = data[i * cols + 4];
+                            float x1 = data[i * 7 + 1];
+                            float y1 = data[i * 7 + 2];
+                            float x2 = data[i * 7 + 3];
+                            float y2 = data[i * 7 + 4];
                             
                             // Convert normalized coordinates to pixel coordinates
                             int left = static_cast<int>(x1 * frame.cols);
@@ -140,17 +203,20 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
                     }
                 } 
                 // Check if the output format is [batch, num_detections, 85] (common for older YOLO models)
-                else if (cols > 5) {
+                else if (out.size.dims() == 3 && out.size[0] == 1 && out.size[1] > 0 && out.size[2] > 5) {
                     std::cout << "Detected [batch, num_detections, 85] format" << std::endl;
+                    int numDetections = out.size[1];
+                    int numClasses = out.size[2] - 5;
+                    
                     // Process each detection
-                    for (int i = 0; i < rows; i++) {
-                        float confidence = data[i * cols + 4];
+                    for (int i = 0; i < numDetections; i++) {
+                        float confidence = data[i * out.size[2] + 4];
                         
                         // Find the class with highest score
                         float maxClassScore = 0.0f;
                         int maxClassId = 0;
-                        for (int j = 5; j < cols; j++) {
-                            float score = data[i * cols + j];
+                        for (int j = 5; j < out.size[2]; j++) {
+                            float score = data[i * out.size[2] + j];
                             if (score > maxClassScore) {
                                 maxClassScore = score;
                                 maxClassId = j - 5;
@@ -170,10 +236,10 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
                         }
                         
                         if (confidence > confThreshold && isPerson) {
-                            float x = data[i * cols];
-                            float y = data[i * cols + 1];
-                            float w = data[i * cols + 2];
-                            float h = data[i * cols + 3];
+                            float x = data[i * out.size[2]];
+                            float y = data[i * out.size[2] + 1];
+                            float w = data[i * out.size[2] + 2];
+                            float h = data[i * out.size[2] + 3];
                             
                             // Convert normalized coordinates to pixel coordinates
                             int left = static_cast<int>((x - w/2) * frame.cols);
@@ -191,7 +257,11 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
                         }
                     }
                 } else {
-                    std::cout << "Unknown output format with " << cols << " columns" << std::endl;
+                    std::cout << "Unknown output format" << std::endl;
+                    std::cout << "Output dimensions: " << out.size.dims() << std::endl;
+                    for (int i = 0; i < out.size.dims(); i++) {
+                        std::cout << "Dimension " << i << ": " << out.size[i] << std::endl;
+                    }
                 }
             }
         } else {

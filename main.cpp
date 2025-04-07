@@ -70,9 +70,18 @@ void threadYolo(model& yoloDetector, SingleObjectData& sharedData, std::atomic<b
 
             float bestConf = -1.0f;
             cv::Rect bestBox;
+            
+            // Draw all detections on the frame for visualization
             for (const auto &det : detections) {
                 std::cout << "Detection: class=" << det.classId << ", confidence=" << det.confidence 
                           << ", box=" << det.box << std::endl;
+                
+                // Draw bounding box for all detections
+                cv::rectangle(frame, det.box, cv::Scalar(0, 255, 0), 2);
+                std::string label = "Person " + std::to_string(static_cast<int>(det.confidence * 100)) + "%";
+                cv::putText(frame, label, cv::Point(det.box.x, det.box.y - 10),
+                            cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 2);
+                
                 if (det.confidence > bestConf) {
                     bestConf = det.confidence;
                     bestBox = det.box;
@@ -96,10 +105,16 @@ void threadYolo(model& yoloDetector, SingleObjectData& sharedData, std::atomic<b
                 }
             }
             sharedData.cv.notify_one();
+            
+            // Display the frame with detections
+            cv::imshow("YOLO Detection View", frame);
+            cv::waitKey(1);
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
+    
+    cv::destroyWindow("YOLO Detection View");
 }
 
 void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit) {
