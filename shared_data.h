@@ -6,9 +6,10 @@
 struct SharedDetection {
     cv::Rect box;
     bool valid;
-    uint64_t frameSeq; // or int64_t timestamp
-    cv::Mat frame;     // Store the frame where the detection occurred
-    bool newDetection; // Flag for new detection (if using previous modification)
+    uint64_t frameSeq;
+    cv::Mat frame;
+    bool newDetection;
+    int classId; // Added to store class ID
 };
 
 class SingleObjectData
@@ -16,14 +17,12 @@ class SingleObjectData
 public:
     SingleObjectData() {
         detection.valid = false;
-        detection.newDetection = false; // If using previous modification
+        detection.newDetection = false;
         detection.frameSeq = 0;
+        detection.classId = -1; // Initialize to invalid
     }
 
-    // The bounding box and frame from YOLO
     SharedDetection detection;
-
-    // Protect detection with a mutex and condition variable
     std::mutex mtx;
-    std::condition_variable cv; // For notifying tracker (optional, from previous mod)
+    std::condition_variable cv;
 };

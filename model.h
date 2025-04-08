@@ -12,8 +12,9 @@ class model
 public:
     model();
 public:
-    model(const std::string& configPath, const std::string& weightsPath, const std::string& namesPath);
+    model(const std::string& onnxPath, const std::string& namesPath, int targetClassId = 0);
     void detectAndDisplay(std::vector<cv::Mat>& frames);
+
     // Return bounding boxes from YOLO
     // Each "Detection" can store box, confidence, classId, etc.
     struct Detection {
@@ -29,6 +30,7 @@ private:
     cv::dnn::Net yoloNet_;
     std::vector<std::string> classNames_;
     void printMessage(const std::string& message) const;
+    int targetClassId_; // New member to store the target class ID
 };
 
 #endif // MODEL_H

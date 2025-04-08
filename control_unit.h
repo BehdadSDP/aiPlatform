@@ -23,23 +23,22 @@ public:
 
     void setDetectionFrameInterval(int interval);
     void setTrackingFrameInterval(int interval);
-    bool shouldDetect() const; // No increment here
-    bool shouldTrack() const;  // No increment here
+    bool shouldDetect() const;
+    bool shouldTrack() const;
 
     void setDetectionMode(Mode mode);
     void setTrackingMode(Mode mode);
     Mode getDetectionMode() const { return detectionMode_; }
     Mode getTrackingMode() const { return trackingMode_; }
 
-    // Allow CameraHandler to increment counters
     void incrementDetectionFrameCounter() { detectionFrameCounter_++; }
     void incrementTrackingFrameCounter() { trackingFrameCounter_++; }
 
 private:
-    std::atomic<Mode> detectionMode_{Mode::RUN};
-    std::atomic<Mode> trackingMode_{Mode::RUN};
+    std::atomic<Mode> detectionMode_{Mode::RUN}; // YOLO starts in RUN
+    std::atomic<Mode> trackingMode_{Mode::STANDBY}; // Tracker starts in STANDBY
     std::atomic<int> detectionFrameInterval_{1};
     std::atomic<int> trackingFrameInterval_{1};
-    std::atomic<int> detectionFrameCounter_{0}; // No longer mutable, incremented externally
-    std::atomic<int> trackingFrameCounter_{0};  // Already updated from previous change
+    std::atomic<int> detectionFrameCounter_{0};
+    std::atomic<int> trackingFrameCounter_{0};
 };
