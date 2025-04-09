@@ -15,18 +15,25 @@ ControlUnit::Action ControlUnit::decideAction(SingleObjectData& sharedData, bool
         }
     }
 
-    if (!isTracking && yoloValid && newDetection && detectionMode_ == Mode::RUN) {
-        const_cast<ControlUnit*>(this)->detectionMode_ = Mode::STANDBY;
-        const_cast<ControlUnit*>(this)->trackingMode_ = Mode::RUN;
+    if (!isTracking && yoloValid && newDetection) {
+        std::cout << "Control Unit: Decision - INITIALIZE with YOLO box " << yoloBox << std::endl;
         return Action::INITIALIZE;
     }
 
-    if (isTracking && trackingMode_ == Mode::RUN) {
+    if (isTracking) {
         if (lastTrackBox.width <= 0 || lastTrackBox.height <= 0) {
-            const_cast<ControlUnit*>(this)->trackingMode_ = Mode::STANDBY;
-            const_cast<ControlUnit*>(this)->detectionMode_ = Mode::RUN;
+            if (yoloValid && newDetection) {
+                std::cout << "Control Unit: Decision - REINITIALIZE with YOLO box " << yoloBox << std::endl;
+                return Action::REINITIALIZE;
+            } else {
+                std::cout << "Control Unit: Decision - STOP (tracker failed, no new YOLO detection)" << std::endl;
+                return Action::STOP;
+            }
+        } else if (!yoloValid && !newDetection) {
+            std::cout << "Control Unit: Decision - STOP (YOLO detection failed)" << std::endl;
             return Action::STOP;
         }
+        std::cout << "Control Unit: Decision - CONTINUE tracking" << std::endl;
         return Action::CONTINUE;
     }
 
@@ -35,7 +42,7 @@ ControlUnit::Action ControlUnit::decideAction(SingleObjectData& sharedData, bool
 
 void ControlUnit::setDetectionFrameInterval(int interval) {
     detectionFrameInterval_ = (interval > 0) ? interval : 1;
-    detectionFrameCounter_ = 0;
+    detectionFrameCounter_ = 0; // Reset when interval changes
     std::cout << "Control Unit: Detection frame interval set to " << detectionFrameInterval_ << std::endl;
 }
 
@@ -46,10 +53,12 @@ void ControlUnit::setTrackingFrameInterval(int interval) {
 }
 
 bool ControlUnit::shouldDetect() const {
+    // No increment here; just check the counter
     return (detectionFrameCounter_ % detectionFrameInterval_ == 0);
 }
 
 bool ControlUnit::shouldTrack() const {
+    // Already updated: no increment, just check
     return (trackingFrameCounter_ % trackingFrameInterval_ == 0);
 }
 
