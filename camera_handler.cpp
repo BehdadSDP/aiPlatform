@@ -149,7 +149,7 @@ void CameraHandler::configureCamera(int resolutionIndex, int customWidth, int cu
     applyConfiguration(config, streamConfig);
 }
 
-void CameraHandler::setFrameRate(float targetFps) {
+void CameraHandler::setFrameRate(int targetFps) {
     if (!camera_) {
         throw CameraException("Camera not acquired yet. Call acquireCamera() first.");
     }
@@ -267,7 +267,6 @@ void CameraHandler::requestComplete(Request* request) {
 
         // Increment both counters here
         controlUnit_.incrementDetectionFrameCounter();
-        controlUnit_.incrementTrackingFrameCounter();
 
         munmap(mappedData, length);
     }

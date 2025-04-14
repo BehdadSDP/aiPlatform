@@ -25,14 +25,12 @@ public:
     void setTrackingFrameInterval(int interval);
     bool shouldDetect() const;
     bool shouldTrack() const;
-
     void setDetectionMode(Mode mode);
     void setTrackingMode(Mode mode);
-    Mode getDetectionMode() const { return detectionMode_; }
-    Mode getTrackingMode() const { return trackingMode_; }
-
     void incrementDetectionFrameCounter() { detectionFrameCounter_++; }
     void incrementTrackingFrameCounter() { trackingFrameCounter_++; }
+    Mode getDetectionMode() const { return detectionMode_; }
+    Mode getTrackingMode() const { return trackingMode_; }
 
 private:
     std::atomic<Mode> detectionMode_{Mode::RUN}; // YOLO starts in RUN

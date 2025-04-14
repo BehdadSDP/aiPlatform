@@ -1,15 +1,20 @@
 # Camera settings
-camera_resolution_index=0
-custom_width=640
-custom_height=640
+[camera]
+resolution_index=0
+width=640
+height=640
 frame_rate=20
 
 # Detection settings
-detection_mode=0
-detection_interval=1
+[detection]
+mode=1
+interval=10
 
 # Tracking settings
-tracking_mode=0
-tracking_interval=1
+[tracking]
+mode=0
+interval=1
 
+# General settings
+[general]
 target_class_id=0

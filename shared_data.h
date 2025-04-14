@@ -9,7 +9,7 @@ struct SharedDetection {
     uint64_t frameSeq;
     cv::Mat frame;
     bool newDetection;
-    int classId; // Added to store class ID
+    int classId;
 };
 
 class SingleObjectData
@@ -19,10 +19,12 @@ public:
         detection.valid = false;
         detection.newDetection = false;
         detection.frameSeq = 0;
-        detection.classId = -1; // Initialize to invalid
+        detection.classId = -1;
+        trackerFailed = false;
     }
 
     SharedDetection detection;
+    bool trackerFailed;
     std::mutex mtx;
     std::condition_variable cv;
 };

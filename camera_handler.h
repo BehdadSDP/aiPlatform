@@ -14,7 +14,6 @@
 #include <condition_variable>
 #include <chrono>
 #include <opencv4/opencv2/opencv.hpp>
-#include "model.h"
 #include "frame_buffer_manager.h"
 #include "control_unit.h" // Include ControlUnit
 
@@ -56,7 +55,8 @@ public:
     void applyConfiguration(std::unique_ptr<CameraConfiguration>& config,
                             StreamConfiguration& streamConfig);
 
-    void configureCamera(int resolutionIndex, int customWidth = 0, int customHeight = 0);    void setFrameRate(float targetFps);
+    void configureCamera(int resolutionIndex, int customWidth = 0, int customHeight = 0);
+    void setFrameRate(int targetFps);
 
     void cleanup();
     void startStreaming();
