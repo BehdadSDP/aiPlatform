@@ -51,6 +51,8 @@ void processDetections(const std::vector<model::Detection>& detections, const cv
 
 // Updated threadYolo
 void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<bool> &running, ControlUnit& controlUnit, int detectionMode) {
+    bool alreadyDetected = false;
+    bool trackerFailed = false;
     while (running) {
         if (detectionMode == 0 && controlUnit.shouldDetect()) {
             FrameData frameData;
@@ -60,14 +62,11 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
             }
             cv::Mat frame = frameData.image;
             if (frame.empty()) continue;
-
             std::vector<model::Detection> detections = yoloDetector.detect(frame);
-
             processDetections(detections, frame, frameData.sequence, sharedData);
         }
         else if (detectionMode == 1) {
-            bool alreadyDetected = false;
-            bool trackerFailed = false;
+
             {
                 std::lock_guard<std::mutex> lock(sharedData.mtx);
                 alreadyDetected = sharedData.detection.valid;
@@ -77,18 +76,20 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
-
             FrameData frameData;
             if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
-            cv::Mat frame = frameData.image;
-            if (frame.empty()) continue;
+            if(!alreadyDetected || (trackerFailed)){
+                cv::Mat frame = frameData.image;
+                if (frame.empty()) continue;
+                std::vector<model::Detection> detections = yoloDetector.detect(frame);
+                std::cout << "YOLO: Detected " << detections.size() << " objects" << std::endl;
+                std::cout << "alreadyDetected status: " << alreadyDetected << std::endl;
+                processDetections(detections, frame, frameData.sequence, sharedData);
+            }
 
-            std::vector<model::Detection> detections = yoloDetector.detect(frame);
-            std::cout << "YOLO: Detected " << detections.size() << " objects" << std::endl;
-            processDetections(detections, frame, frameData.sequence, sharedData);
         }
     }
 }
@@ -125,8 +126,8 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Vit
                 detectionFrame = sharedData.detection.frame.clone();
                 classId = sharedData.detection.classId;
                 sharedData.detection.newDetection = false;
-                sharedData.detection.valid = false; // Clear for next detection
-                sharedData.trackerFailed = false; // Reset on initialization
+//                sharedData.detection.valid = false; // Clear for next detection
+//                sharedData.trackerFailed = false; // Reset on initialization
             }
         }
 
