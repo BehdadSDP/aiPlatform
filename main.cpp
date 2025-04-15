@@ -57,7 +57,7 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
         if (detectionMode == 0 && controlUnit.shouldDetect()) {
             FrameData frameData;
             if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+//                std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             cv::Mat frame = frameData.image;
@@ -66,19 +66,18 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
             processDetections(detections, frame, frameData.sequence, sharedData);
         }
         else if (detectionMode == 1) {
-
             {
                 std::lock_guard<std::mutex> lock(sharedData.mtx);
                 alreadyDetected = sharedData.detection.valid;
                 trackerFailed = sharedData.trackerFailed;
             }
             if (alreadyDetected && !trackerFailed) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+//                std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             FrameData frameData;
             if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+//                std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             if(!alreadyDetected || (trackerFailed)){
@@ -86,7 +85,6 @@ void threadYolo(model &yoloDetector, SingleObjectData &sharedData, std::atomic<b
                 if (frame.empty()) continue;
                 std::vector<model::Detection> detections = yoloDetector.detect(frame);
                 std::cout << "YOLO: Detected " << detections.size() << " objects" << std::endl;
-                std::cout << "alreadyDetected status: " << alreadyDetected << std::endl;
                 processDetections(detections, frame, frameData.sequence, sharedData);
             }
 
@@ -108,10 +106,9 @@ void visualizeTracking(const cv::Mat& frame, bool isTracking, bool trackerValid,
 }
 
 // Updated threadTracker
-void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, VitTracker& tracker, const std::vector<std::string>& classNames, int detectionMode) {
+void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, VitTracker& tracker, const std::vector<std::string>& classNames, ControlUnit& controlUnit, int detectionMode) {
     bool isTracking = false;
     cv::Rect lastTrackBox;
-
     while (running) {
         // Check for new detection to initialize
         bool shouldInitialize = false;
@@ -137,16 +134,18 @@ void threadTracker(SingleObjectData &sharedData, std::atomic<bool> &running, Vit
                 continue;
             }
             tracker.init(detectionFrame, yoloBox);
+            std::cout << "shoudlDetect_frame_counter:" << controlUnit.getDetectionFrameCounter() << std::endl;
             isTracking = true;
             lastTrackBox = yoloBox;
             std::string className = (classId >= 0 && classId < static_cast<int>(classNames.size())) ? classNames[classId] : "Unknown";
             std::cout << "Tracker: Initialized, Class: " << className << std::endl;
+            shouldInitialize = false;
         }
 
         // Get frame for update
         FrameData frameData;
         if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+//            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
         cv::Mat frame = frameData.image;
@@ -216,17 +215,15 @@ int main() {
         cameraHandler.configureCamera(resolutionIndex, customWidth, customHeight);
         cameraHandler.setFrameRate(frameRate);
 
-        controlUnit.setDetectionMode(static_cast<ControlUnit::Mode>(detectionMode));
-        controlUnit.setTrackingMode(static_cast<ControlUnit::Mode>(trackingMode));
         controlUnit.setDetectionFrameInterval(detectionInterval);
-        controlUnit.setTrackingFrameInterval(trackingInterval);
+//        controlUnit.setTrackingFrameInterval(trackingInterval);
 
         SingleObjectData singleObjData;
 
         cameraHandler.startStreaming();
 
         std::thread yoloThread(threadYolo, std::ref(yoloDetector), std::ref(singleObjData), std::ref(running), std::ref(controlUnit), detectionMode);
-        std::thread trackerThread(threadTracker, std::ref(singleObjData), std::ref(running), std::ref(*vitTracker), std::ref(classNames), detectionMode);
+        std::thread trackerThread(threadTracker, std::ref(singleObjData), std::ref(running), std::ref(*vitTracker), std::ref(classNames), std::ref(controlUnit), detectionMode);
         std::cout << "Streaming... Press Ctrl+C to exit." << std::endl;
 
         while (running) {

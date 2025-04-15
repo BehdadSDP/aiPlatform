@@ -6,37 +6,19 @@
 class ControlUnit {
 public:
     ControlUnit() = default;
-
-    enum class Action {
-        INITIALIZE,
-        CONTINUE,
-        REINITIALIZE,
-        STOP
-    };
-
-    enum class Mode {
-        RUN,
-        STANDBY
-    };
-
-    Action decideAction(SingleObjectData& sharedData, bool isTracking, const cv::Rect& lastTrackBox) const;
-
     void setDetectionFrameInterval(int interval);
-    void setTrackingFrameInterval(int interval);
     bool shouldDetect() const;
-    bool shouldTrack() const;
-    void setDetectionMode(Mode mode);
-    void setTrackingMode(Mode mode);
-    void incrementDetectionFrameCounter() { detectionFrameCounter_++; }
-    void incrementTrackingFrameCounter() { trackingFrameCounter_++; }
-    Mode getDetectionMode() const { return detectionMode_; }
-    Mode getTrackingMode() const { return trackingMode_; }
+    void incrementDetectionFrameCounter() {
+            std::lock_guard<std::mutex> lock(counterMutex_);
+            detectionFrameCounter_++;
+        }
+    void resetDetectionFrameInterval();
+    int getDetectionFrameCounter() const { return detectionFrameCounter_; }
 
 private:
-    std::atomic<Mode> detectionMode_{Mode::RUN}; // YOLO starts in RUN
-    std::atomic<Mode> trackingMode_{Mode::STANDBY}; // Tracker starts in STANDBY
     std::atomic<int> detectionFrameInterval_{1};
     std::atomic<int> trackingFrameInterval_{1};
-    std::atomic<int> detectionFrameCounter_{0};
-    std::atomic<int> trackingFrameCounter_{0};
+    int detectionFrameCounter_{0};
+    int trackingFrameCounter_{0};
+    mutable std::mutex counterMutex_;
 };

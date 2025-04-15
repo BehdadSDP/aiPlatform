@@ -7,8 +7,8 @@ frame_rate=20
 
 # Detection settings
 [detection]
-mode=0
-interval=50
+mode=1
+interval=2
 
 # Tracking settings
 [tracking]
