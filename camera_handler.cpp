@@ -266,7 +266,7 @@ void CameraHandler::requestComplete(Request* request) {
         FrameBufferManager::getInstance().addFrame(frameData);
 
         // Increment camera counter
-        controlUnit_.incrementDetectionFrameCounter();
+        controlUnit_.notifyNewFrame();
 
         munmap(mappedData, length);
     }
