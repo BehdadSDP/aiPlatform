@@ -83,7 +83,7 @@ void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& de
 }
 
 
-// Updated YOLO detection thread
+// Updated YOLO detection thread with timing measurement
 void threadYolo(model &yoloDetector, std::atomic<bool> &running, ControlUnit& controlUnit, const std::vector<std::string>& classNames) {
     while (running) {
         // Wait for our turn to run detection
@@ -100,8 +100,16 @@ void threadYolo(model &yoloDetector, std::atomic<bool> &running, ControlUnit& co
         cv::Mat frame = frameData.image;
         if (frame.empty()) continue;
         
+        // Measure detection time
+        auto start = std::chrono::high_resolution_clock::now();
+        
         // Run detection
         std::vector<model::Detection> detections = yoloDetector.detect(frame);
+        
+        // Calculate and print detection time
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        std::cout << "YOLO detection time: " << duration << "ms" << std::endl;
         
         // Visualize detections
         visualizeDetections(frame, detections, classNames);
