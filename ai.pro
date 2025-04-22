@@ -14,6 +14,7 @@ SOURCES += \
     main.cpp \
     model.cpp \
     shared_data.cpp \
+    siamfc_pp_tracker.cpp \
     vittracker.cpp
 
 # Add libcamera and dependencies
@@ -51,4 +52,5 @@ HEADERS += \
     frame_buffer_manager.h \
     model.h \
     shared_data.h \
+    siamfc_pp_tracker.h \
     vittracker.h

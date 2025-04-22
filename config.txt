@@ -7,13 +7,15 @@ frame_rate=20
 
 # Detection settings
 [detection]
-mode=0
+mode=1
 interval=8000
 
 # Tracking settings
 [tracking]
 mode=0
 interval=1
+# Tracker type: 0 for VitTracker, 1 for SiamFCPP tracker
+tracker_type=1
 
 # General settings
 [general]

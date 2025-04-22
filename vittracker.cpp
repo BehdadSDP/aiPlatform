@@ -12,6 +12,7 @@ VitTracker::VitTracker(const std::string& onnxPath)
     // Create the TrackerVit instance
     try {
         tracker_ = cv::TrackerVit::create(params_);
+        std::cout << "VitTracker initialized with model: " << onnxPath << std::endl;
     } catch (const cv::Exception& e) {
         throw std::runtime_error("Failed to create TrackerVit: " + std::string(e.what()));
     }
@@ -29,10 +30,17 @@ void VitTracker::init(const cv::Mat& frame, const cv::Rect& initBox)
         throw std::runtime_error("Initial bounding box is outside frame bounds");
     }
 
+    // Make sure to use a deep copy of the frame
+    cv::Mat frameCopy = frame.clone();
+
     // Initialize the tracker
     try {
-        tracker_->init(frame, trackedBox_);
+        tracker_->init(frameCopy, trackedBox_);
+        std::cout << "VitTracker initialized with box: " << trackedBox_ << std::endl;
     } catch (const cv::Exception& e) {
+        std::cerr << "TrackerVit::init failed: " << e.what() << std::endl;
+        initialized_ = false;
+        trackScore_ = 0.0f;
         throw std::runtime_error("TrackerVit::init failed: " + std::string(e.what()));
     }
 
@@ -46,10 +54,13 @@ cv::Rect VitTracker::update(const cv::Mat& frame)
         return cv::Rect(); // Return empty rect if not initialized or frame is invalid
     }
 
+    // Make a clone of the frame to avoid any potential memory issues
+    cv::Mat frameCopy = frame.clone();
+
     // Update the tracker
     bool isLocated = false;
     try {
-        isLocated = tracker_->update(frame, trackedBox_);
+        isLocated = tracker_->update(frameCopy, trackedBox_);
         trackScore_ = tracker_->getTrackingScore();
     } catch (const cv::Exception& e) {
         std::cerr << "TrackerVit::update failed: " << e.what() << std::endl;
@@ -57,11 +68,33 @@ cv::Rect VitTracker::update(const cv::Mat& frame)
         trackScore_ = 0.0f;
     }
 
-    // If tracking fails or score is too low, mark as uninitialized
-    if (!isLocated || trackScore_ < 0.3f || trackedBox_.width <= 0 || trackedBox_.height <= 0) {
+    // Validate tracking results
+    if (!isLocated || trackScore_ < 0.3f) {
+        std::cout << "VitTracker: Tracking lost, score: " << trackScore_ << std::endl;
         initialized_ = false;
         trackScore_ = 0.0f;
         return cv::Rect(); // Return empty rect to indicate tracking loss
+    }
+
+    // Validate bounding box dimensions and position
+    if (trackedBox_.width <= 0 || trackedBox_.height <= 0 || 
+        trackedBox_.x < 0 || trackedBox_.y < 0 || 
+        trackedBox_.x + trackedBox_.width > frame.cols || 
+        trackedBox_.y + trackedBox_.height > frame.rows) {
+        
+        std::cout << "VitTracker: Invalid bounding box: " << trackedBox_ << std::endl;
+        initialized_ = false;
+        trackScore_ = 0.0f;
+        return cv::Rect(); // Return empty rect to indicate tracking loss
+    }
+
+    // Ensure the box is within the frame bounds
+    trackedBox_ = trackedBox_ & cv::Rect(0, 0, frame.cols, frame.rows);
+    if (trackedBox_.width <= 0 || trackedBox_.height <= 0) {
+        std::cout << "VitTracker: Box outside frame after bounds check" << std::endl;
+        initialized_ = false;
+        trackScore_ = 0.0f;
+        return cv::Rect();
     }
 
     return trackedBox_;

@@ -1,20 +1,23 @@
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
-Running detection on frame 0 (interval: 2)
+/home/pi5/shared_folder/aiPlatform/main.cpp:364: error: invalid new-expression of abstract class type ‘SiamFCPPAdapter2’
+In file included from /usr/include/c++/12/memory:76,
+                 from /usr/include/libcamera/libcamera/camera.h:11,
+                 from /usr/include/libcamera/libcamera/libcamera.h:11,
+                 from ../shared_folder/aiPlatform/camera_handler.h:5,
+                 from ../shared_folder/aiPlatform/main.cpp:1:
+/usr/include/c++/12/bits/unique_ptr.h: In instantiation of ‘std::__detail::__unique_ptr_t<_Tp> std::make_unique(_Args&& ...) [with _Tp = SiamFCPPAdapter2; _Args = {const char (&)[57]}; __detail::__unique_ptr_t<_Tp> = __detail::__unique_ptr_t<SiamFCPPAdapter2>]’:
+../shared_folder/aiPlatform/main.cpp:364:57:   required from here
+/usr/include/c++/12/bits/unique_ptr.h:1065:30: error: invalid new-expression of abstract class type ‘SiamFCPPAdapter2’
+ 1065 |     { return unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...)); }
+      |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/main.cpp:203:7: note:   because the following virtual functions are pure within ‘SiamFCPPAdapter2’:
+  203 | class SiamFCPPAdapter2 : public TrackerInterface {
+      |       ^~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/main.cpp:167:22: note:     ‘virtual cv::Rect TrackerInterface::update(const cv::Mat&)’
+  167 |     virtual cv::Rect update(const cv::Mat& frame) = 0;
+      |                      ^~~~~~
+../shared_folder/aiPlatform/main.cpp:168:18: note:     ‘virtual bool TrackerInterface::isInitialized() const’
+  168 |     virtual bool isInitialized() const = 0;
+      |                  ^~~~~~~~~~~~~
+../shared_folder/aiPlatform/main.cpp:169:19: note:     ‘virtual float TrackerInterface::getTrackingScore() const’
+  169 |     virtual float getTrackingScore() const = 0;
+      |                   ^~~~~~~~~~~~~~~~
