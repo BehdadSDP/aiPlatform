@@ -20,9 +20,6 @@ public:
     // Initialize with the first frame and bounding box
     void init(const cv::Mat& frame, const std::vector<double>& bbox);
 
-    // Feature extraction method
-    std::tuple<cv::Mat, cv::Mat> feature(const cv::Mat& im);
-
     // Update tracking on a subsequent frame, returns the new bounding box
     cv::Rect update(const cv::Mat& frame);
 

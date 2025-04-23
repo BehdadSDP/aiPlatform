@@ -33,7 +33,6 @@ void processDetections(const std::vector<model::Detection>& detections, const cv
             bestClassId = det.classId;
         }
     }
-
     if (bestConf > 0.25f) {
         controlUnit.setDetection(bestBox, frame, frameSeq, bestClassId);
     } else {
@@ -374,7 +373,7 @@ int main() {
             tracker = std::make_unique<VitTrackerAdapter>("/home/pi5/shared_folder/aiPlatform/models/vittracker.onnx");
         } else {
             std::cout << "Using SiamFCPP tracker" << std::endl;
-            tracker = std::make_unique<SiamFCPPAdapter2>("/home/pi5/shared_folder/aiPlatform/models/SiamFC_PP.onnx");
+            tracker = std::make_unique<SiamFCPPAdapter2>("/home/pi5/shared_folder/aiPlatform/models/SiamFC_PP_init.onnx");
         }
 
         // Set up atomic flag for signal handling

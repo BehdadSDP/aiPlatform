@@ -1,23 +1,86 @@
-/home/pi5/shared_folder/aiPlatform/main.cpp:364: error: invalid new-expression of abstract class type ‘SiamFCPPAdapter2’
-In file included from /usr/include/c++/12/memory:76,
-                 from /usr/include/libcamera/libcamera/camera.h:11,
-                 from /usr/include/libcamera/libcamera/libcamera.h:11,
-                 from ../shared_folder/aiPlatform/camera_handler.h:5,
-                 from ../shared_folder/aiPlatform/main.cpp:1:
-/usr/include/c++/12/bits/unique_ptr.h: In instantiation of ‘std::__detail::__unique_ptr_t<_Tp> std::make_unique(_Args&& ...) [with _Tp = SiamFCPPAdapter2; _Args = {const char (&)[57]}; __detail::__unique_ptr_t<_Tp> = __detail::__unique_ptr_t<SiamFCPPAdapter2>]’:
-../shared_folder/aiPlatform/main.cpp:364:57:   required from here
-/usr/include/c++/12/bits/unique_ptr.h:1065:30: error: invalid new-expression of abstract class type ‘SiamFCPPAdapter2’
- 1065 |     { return unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...)); }
-      |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-../shared_folder/aiPlatform/main.cpp:203:7: note:   because the following virtual functions are pure within ‘SiamFCPPAdapter2’:
-  203 | class SiamFCPPAdapter2 : public TrackerInterface {
-      |       ^~~~~~~~~~~~~~~~
-../shared_folder/aiPlatform/main.cpp:167:22: note:     ‘virtual cv::Rect TrackerInterface::update(const cv::Mat&)’
-  167 |     virtual cv::Rect update(const cv::Mat& frame) = 0;
-      |                      ^~~~~~
-../shared_folder/aiPlatform/main.cpp:168:18: note:     ‘virtual bool TrackerInterface::isInitialized() const’
-  168 |     virtual bool isInitialized() const = 0;
-      |                  ^~~~~~~~~~~~~
-../shared_folder/aiPlatform/main.cpp:169:19: note:     ‘virtual float TrackerInterface::getTrackingScore() const’
-  169 |     virtual float getTrackingScore() const = 0;
-      |                   ^~~~~~~~~~~~~~~~
+Config camera.resolution_index = 0
+Config camera.width = 640
+Config camera.height = 640
+Config camera.frame_rate = 20
+Config detection.interval = 8000
+Config tracking.interval = 1
+Config detection.mode = 1
+Config general.target_class_id = 0
+[3:58:39.830033464] [25857]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+53-29156679
+[3:58:39.844906370] [25870]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
+[3:58:39.889762625] [25870]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx477@1a to CFE device /dev/media3 and ISP device /dev/media0 using PiSP variant BCM2712_D0
+Available cameras:
+0: /base/axi/pcie@1000120000/rp1/i2c@80000/imx477@1a
+Camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx477@1a acquired successfully!
+Default configuration: 800x600-XRGB8888
+
+Available configuration options for /base/axi/pcie@1000120000/rp1/i2c@80000/imx477@1a:
+0: 1332x990-RGB888 (valid)
+1: 2028x1080-RGB888 (valid)
+2: 2028x1520-RGB888 (valid)
+3: 4056x3040-RGB888 (valid)
+4: Enter custom width and height
+Validation status: Valid
+Configuring camera with: 1332x990-RGB888
+[3:58:39.891683440] [25857]  INFO Camera camera.cpp:1202 configuring streams: (0) 1332x990-RGB888
+[3:58:39.891964144] [25870]  INFO RPI pisp.cpp:1484 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx477@1a - Selected sensor format: 2028x1520-SBGGR12_1X12 - Selected CFE format: 2028x1520-PC1B
+Applied configuration: 1332x990-RGB888
+Requested frame rate: 20 FPS (Frame duration: 50000 µs)
+Control Unit: Detection mode set to tracker-initialization-based
+Control Unit: Detection interval set to 8000ms
+Control Unit: Tracking interval set to 1ms
+Camera streaming started. Press Ctrl+C to stop.
+Loaded 80 class names.
+Target class set to: person (ID: 0)
+Using SiamFCPP tracker
+[SiamFC_PP] Constructor called with model path: /home/pi5/shared_folder/aiPlatform/models/SiamFC_PP.onnx
+[SiamFC_PP] Hyperparameters initialized: score_size=17, windowing=cosine
+[SiamFC_PP] Loading ONNX model from: /home/pi5/shared_folder/aiPlatform/models/SiamFC_PP.onnx
+[SiamFC_PP] Available DNN backends:
+  - Backend: 3, Target: 0
+[SiamFC_PP] Trying OpenCV backend...
+[SiamFC_PP] SiamFC_PP tracker initialized successfully with model: /home/pi5/shared_folder/aiPlatform/models/SiamFC_PP.onnx
+Streaming... Press Ctrl+C to exit.
+YOLO detection time: 4188ms
+YOLO: Detected 0 objects
+YOLO detection time: 3937ms
+YOLO: Detected 0 objects
+YOLO detection time: 3333ms
+YOLO: Detected 1 objects
+YOLO detection time: 3281ms
+YOLO: Detected 2 objects
+Detection box: x=502, y=520, width=327, height=468
+SiamFCPPAdapter2::init - bbox: [502, 520, 327, 468]
+bbox size: 4
+[SiamFC_PP] Trying z_size = 303
+[SiamFC_PP] Warped patch created with size: [303 x 303]
+[SiamFC_PP] Crop created with size: [303 x 303]
+[SiamFC_PP DEBUG] Crop dimensions for z_size = 303: [303 x 303], channels: 3, type: 16
+[Validation] z_blob_303 value range: [-0.38149, 0.441059]
+[Validation] z_blob_303 first 10 values: 0.330686 0.326765 0.322843 0.326765 0.330686 0.334608 0.338529 0.338529 0.342451 0.342451 
+[Validation] Saved z_blob_303 to z_blob_303_dump.bin
+211 c_x input.111 onnx::Mul_212 onnx::Mul_213 output r_x 
+[SiamFC_PP ERROR] OpenCV exception in forward pass for z_size = 303: OpenCV(4.10.0) /home/pi5/opencv/modules/dnn/src/net_impl.cpp:570: error: (-215:Assertion failed) inp.total() in function 'allocateLayers'
+
+[SiamFC_PP] Trying z_size = 127
+[SiamFC_PP] Warped patch created with size: [127 x 127]
+[SiamFC_PP] Crop created with size: [127 x 127]
+[SiamFC_PP DEBUG] Crop dimensions for z_size = 127: [127 x 127], channels: 3, type: 16
+[Validation] z_blob_127 value range: [-0.377569, 0.433216]
+[Validation] z_blob_127 first 10 values: 0.330686 0.322843 0.334608 0.338529 0.342451 0.311078 0.307157 0.330686 0.334608 0.318922 
+[Validation] Saved z_blob_127 to z_blob_127_dump.bin
+211 c_x input.111 onnx::Mul_212 onnx::Mul_213 output r_x 
+[SiamFC_PP ERROR] OpenCV exception in forward pass for z_size = 127: OpenCV(4.10.0) /home/pi5/opencv/modules/dnn/src/net_impl.cpp:570: error: (-215:Assertion failed) inp.total() in function 'allocateLayers'
+
+[SiamFC_PP] Trying z_size = 255
+[SiamFC_PP] Warped patch created with size: [255 x 255]
+[SiamFC_PP] Crop created with size: [255 x 255]
+[SiamFC_PP DEBUG] Crop dimensions for z_size = 255: [255 x 255], channels: 3, type: 16
+[Validation] z_blob_255 value range: [-0.377569, 0.437137]
+[Validation] z_blob_255 first 10 values: 0.330686 0.326765 0.322843 0.330686 0.334608 0.338529 0.338529 0.342451 0.342451 0.338529 
+[Validation] Saved z_blob_255 to z_blob_255_dump.bin
+211 c_x input.111 onnx::Mul_212 onnx::Mul_213 output r_x 
+[SiamFC_PP ERROR] OpenCV exception in forward pass for z_size = 255: OpenCV(4.10.0) /home/pi5/opencv/modules/dnn/src/net_impl.cpp:570: error: (-215:Assertion failed) inp.total() in function 'allocateLayers'
+
+[SiamFC_PP ERROR] Failed to initialize tracker with any z_size
+Tracker initialization failed: Failed to initialize tracker
