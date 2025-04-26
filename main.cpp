@@ -1,7 +1,6 @@
 #include "camera_handler.h"
 #include "frame_buffer_manager.h"
 #include "model.h"
-#include "shared_data.h"
 #include "vittracker.h"
 #include "siamfc_pp_tracker.h"
 #include "control_unit.h"
@@ -201,7 +200,7 @@ private:
 // SiamFCPPAdapter2 class that adapts our tracker to the TrackerInterface
 class SiamFCPPAdapter2 : public TrackerInterface {
 public:
-    explicit SiamFCPPAdapter2(const std::string& modelPath) : tracker_(modelPath) {}
+    explicit SiamFCPPAdapter2(const std::string& modelPath, const std::string& tmodelPath) : tracker_(modelPath, tmodelPath) {}
 
     void init(const cv::Mat& frame, const cv::Rect& initBox) override {
         std::vector<double> bbox = {
@@ -373,7 +372,8 @@ int main() {
             tracker = std::make_unique<VitTrackerAdapter>("/home/pi5/shared_folder/aiPlatform/models/vittracker.onnx");
         } else {
             std::cout << "Using SiamFCPP tracker" << std::endl;
-            tracker = std::make_unique<SiamFCPPAdapter2>("/home/pi5/shared_folder/aiPlatform/models/SiamFC_PP_init.onnx");
+            tracker = std::make_unique<SiamFCPPAdapter2>("/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracker_feature.onnx",
+                                                         "/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracking.onnx");
         }
 
         // Set up atomic flag for signal handling
