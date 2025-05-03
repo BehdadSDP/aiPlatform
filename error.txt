@@ -1,22 +1,20 @@
-std::pair<cv::Point2f, cv::Size2f> 
-restrictBox(const cv::Point2f& target_pos,
-            const cv::Size2f& target_sz,
-            int im_w,
-            int im_h,
-            float min_w,
-            float min_h) {
-    
-    // Create copies that will be modified
-    cv::Point2f restricted_pos = target_pos;
-    cv::Size2f restricted_sz = target_sz;
-    
-    // Restrict position to image boundaries
-    restricted_pos.x = std::max(0.0f, std::min(static_cast<float>(im_w), target_pos.x));
-    restricted_pos.y = std::max(0.0f, std::min(static_cast<float>(im_h), target_pos.y));
-    
-    // Restrict size to be within valid range
-    restricted_sz.width = std::max(min_w, std::min(static_cast<float>(im_w), target_sz.width));
-    restricted_sz.height = std::max(min_h, std::min(static_cast<float>(im_h), target_sz.height));
-    
-    return {restricted_pos, restricted_sz};
-}
+[siam-update] Score vector size: 289
+[siam-update] Score range - min: 0.00622377, max: 0.00674078, avg: 0.00642075
+[postProcessScore] Window influence: 0.21
+[postProcessScore] Penalty_k: 0.04
+[postProcessScore] Original score: 0.00671215, Penalty: 0.930585, Penalized score: 0.214935
+[siam-update] Best score index: 144
+[siam-update] Best original score: 0.00671215
+[siam-update] Best penalized score: 0.214935
+[siam-update] Applied penalty: 0.930585
+[siam-update] New position after postProcessBox: (587.627, 506.066)
+[siam-update] New size after postProcessBox: (710.287, 889.598)
+[siam-update] Restricted position: (587.627, 506.066)
+[siam-update] Restricted size: (710.287, 889.598)
+[siam-update] Final confidence: 0.00671215
+[siam-update] WARNING: Confidence too low (0.00671215 < 0.15), tracking may be unreliable
+[siam-update] Final rect (float): [232.483, 61.2674, 710.287, 889.598]
+[siam-update] Final rect (int): [232, 61, 710, 889]
+[siam-update] ===== Tracking update complete =====
+Tracking failed - confidence: 0.00671215, box: 232,61,710,889
+Tracker: Tracking lost, last confidence: 0.00671215

@@ -81,7 +81,6 @@ void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& de
     cv::waitKey(1);
 }
 
-
 // Updated YOLO detection thread with timing measurement
 void threadYolo(model &yoloDetector, std::atomic<bool> &running, ControlUnit& controlUnit, const std::vector<std::string>& classNames) {
     while (running) {
@@ -116,7 +115,6 @@ void threadYolo(model &yoloDetector, std::atomic<bool> &running, ControlUnit& co
         if (controlUnit.getDetectionMode() == 1) {
             std::cout << "YOLO: Detected " << detections.size() << " objects" << std::endl;
         }
-
         processDetections(detections, frame, frameData.sequence, controlUnit);
     }
 }
@@ -164,11 +162,13 @@ public:
     virtual void init(const cv::Mat& frame, const cv::Rect& initBox) = 0;
     virtual cv::Rect update(const cv::Mat& frame) = 0;
     virtual bool isInitialized() const = 0;
-    virtual float getTrackingScore() const = 0;
-
     // Optional method for SiamFCPP-style initialization
     virtual void model_initializer(const cv::Mat& frame, const cv::Rect& bbox) {
         init(frame, bbox);
+    }
+    // Add method to get last confidence
+    virtual float getLastConfidence() const {
+        return 0.0f;
     }
 };
 
@@ -189,9 +189,6 @@ public:
         return tracker_.isInitialized();
     }
 
-    float getTrackingScore() const override {
-        return tracker_.getTrackingScore();
-    }
 
 private:
     VitTracker tracker_;
@@ -200,33 +197,91 @@ private:
 // SiamFCPPAdapter2 class that adapts our tracker to the TrackerInterface
 class SiamFCPPAdapter2 : public TrackerInterface {
 public:
-    explicit SiamFCPPAdapter2(const std::string& modelPath, const std::string& tmodelPath) : tracker_(modelPath, tmodelPath) {}
+    explicit SiamFCPPAdapter2(const std::string& featureModelPath, const std::string& trackModelPath) {
+        // Initialize the tracker
+        tracker_ = std::make_unique<SiamFCPPTracker2>();
+
+        // Load models
+        if (!tracker_->loadModel(featureModelPath, trackModelPath)) {
+            throw std::runtime_error("Failed to load SiamFCPP tracker models");
+        }
+        std::cout << "SiamFCPP tracker models loaded successfully" << std::endl;
+
+    }
 
     void init(const cv::Mat& frame, const cv::Rect& initBox) override {
-        std::vector<double> bbox = {
-            static_cast<double>(initBox.x),
-            static_cast<double>(initBox.y),
-            static_cast<double>(initBox.width),
-            static_cast<double>(initBox.height)
-        };
-        std::cout << "SiamFCPPAdapter2::init - bbox: [" << bbox[0] << ", " << bbox[1] << ", " << bbox[2] << ", " << bbox[3] << "]" << std::endl;
-        tracker_.init(frame, bbox);
+        std::cout << "SiamFCPPAdapter2::init - bbox: [" << initBox.x << ", " << initBox.y
+                 << ", " << initBox.width << ", " << initBox.height << "]" << std::endl;
+
+        if (!tracker_->init(frame, initBox)) {
+            throw std::runtime_error("Failed to initialize SiamFCPP tracker");
+        }
+        initialized_ = true;
     }
 
     cv::Rect update(const cv::Mat& frame) override {
-        return tracker_.update(frame);
+        if (!initialized_) {
+            throw std::runtime_error("Tracker not initialized");
+        }
+
+        float confidence = 0.0f;
+        cv::Rect result = tracker_->update(frame, confidence);
+
+        // Store confidence for possible later use
+        lastConfidence_ = confidence;
+
+        // Check if tracking is still valid based on confidence and box validity
+        if (confidence < 0.005f || // Lower threshold from 0.01 to 0.005
+            result.width <= 0 || result.height <= 0 ||
+            result.x < 0 || result.y < 0 ||
+            result.x + result.width >= frame.cols ||
+            result.y + result.height >= frame.rows) {
+
+            std::cout << "Tracking failed - confidence: " << confidence
+                      << ", box: " << result.x << "," << result.y << ","
+                      << result.width << "," << result.height << std::endl;
+
+            // Introduce a counter to make tracking failure more robust
+            failureCount_++;
+            
+            // Only declare tracking lost after multiple consecutive failures
+            if (failureCount_ >= 3) {
+                std::cout << "Too many consecutive failures, tracking lost" << std::endl;
+                initialized_ = false;
+                return cv::Rect(0, 0, 0, 0);  // Return empty rect to indicate failure
+            } else {
+                // Return the last valid result for a few frames to handle temporary low confidence
+                return lastValidResult_;
+            }
+        }
+        
+        // Reset failure counter and store valid result
+        failureCount_ = 0;
+        lastValidResult_ = result;
+        
+        return result;
     }
 
     bool isInitialized() const override {
-        return tracker_.isInitialized();
+        return initialized_;
     }
 
-    float getTrackingScore() const override {
-        return tracker_.getTrackingScore();
+    // Override model_initializer to use our init method
+    void model_initializer(const cv::Mat& frame, const cv::Rect& bbox) override {
+        init(frame, bbox);
+    }
+
+    // Implement getLastConfidence to return the stored value
+    float getLastConfidence() const override {
+        return lastConfidence_;
     }
 
 private:
-    SiamFCPPTracker2 tracker_;
+    std::unique_ptr<SiamFCPPTracker2> tracker_;
+    bool initialized_ = false;
+    float lastConfidence_ = 0.0f;
+    cv::Rect lastValidResult_;
+    int failureCount_ = 0;
 };
 
 // Updated tracker thread to use the abstract interface
@@ -295,16 +350,17 @@ void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>
                 lastTrackBox = tracker->update(frame);
                 trackerValid = lastTrackBox.width > 0 && lastTrackBox.height > 0 && tracker->isInitialized();
 
-                // Print tracking box for debugging
+                // Print tracking box and confidence for debugging
                 if (trackerValid) {
                     std::cout << "Tracking box: x=" << lastTrackBox.x << ", y=" << lastTrackBox.y
-                             << ", width=" << lastTrackBox.width << ", height=" << lastTrackBox.height << std::endl;
+                             << ", width=" << lastTrackBox.width << ", height=" << lastTrackBox.height
+                             << ", confidence=" << tracker->getLastConfidence() << std::endl;
                 }
 
                 if (!trackerValid) {
                     isTracking = false;
                     controlUnit.setTrackerFailed(true);
-                    std::cout << "Tracker: Tracking lost" << std::endl;
+                    std::cout << "Tracker: Tracking lost, last confidence: " << tracker->getLastConfidence() << std::endl;
                 }
             } catch (const std::exception& e) {
                 std::cerr << "Tracker update failed: " << e.what() << std::endl;
@@ -375,7 +431,6 @@ int main() {
             tracker = std::make_unique<SiamFCPPAdapter2>("/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracker_feature.onnx",
                                                          "/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracking.onnx");
         }
-
         // Set up atomic flag for signal handling
         std::atomic<bool> running(true);
         g_running = &running;
