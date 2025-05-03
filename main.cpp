@@ -32,7 +32,7 @@ void processDetections(const std::vector<model::Detection>& detections, const cv
             bestClassId = det.classId;
         }
     }
-    if (bestConf > 0.25f) {
+    if (bestConf > 0.15f) {
         controlUnit.setDetection(bestBox, frame, frameSeq, bestClassId);
     } else {
         controlUnit.clearDetection();
@@ -46,7 +46,7 @@ void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& de
     cv::Mat displayFrame = frame.clone();
 
     for (const auto& det : detections) {
-        if (det.confidence > 0.25f) {
+        if (det.confidence > 0.15f) {
             // Draw box
             cv::rectangle(displayFrame, det.box, cv::Scalar(0, 255, 0), 2);
 
@@ -231,7 +231,7 @@ public:
         lastConfidence_ = confidence;
 
         // Check if tracking is still valid based on confidence and box validity
-        if (confidence < 0.005f || // Lower threshold from 0.01 to 0.005
+        if (confidence < 0.1f || //
             result.width <= 0 || result.height <= 0 ||
             result.x < 0 || result.y < 0 ||
             result.x + result.width >= frame.cols ||
