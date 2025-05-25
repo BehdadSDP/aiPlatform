@@ -1,20 +1,40 @@
-[siam-update] Score vector size: 289
-[siam-update] Score range - min: 0.00622377, max: 0.00674078, avg: 0.00642075
-[postProcessScore] Window influence: 0.21
-[postProcessScore] Penalty_k: 0.04
-[postProcessScore] Original score: 0.00671215, Penalty: 0.930585, Penalized score: 0.214935
-[siam-update] Best score index: 144
-[siam-update] Best original score: 0.00671215
-[siam-update] Best penalized score: 0.214935
-[siam-update] Applied penalty: 0.930585
-[siam-update] New position after postProcessBox: (587.627, 506.066)
-[siam-update] New size after postProcessBox: (710.287, 889.598)
-[siam-update] Restricted position: (587.627, 506.066)
-[siam-update] Restricted size: (710.287, 889.598)
-[siam-update] Final confidence: 0.00671215
-[siam-update] WARNING: Confidence too low (0.00671215 < 0.15), tracking may be unreliable
-[siam-update] Final rect (float): [232.483, 61.2674, 710.287, 889.598]
-[siam-update] Final rect (int): [232, 61, 710, 889]
-[siam-update] ===== Tracking update complete =====
-Tracking failed - confidence: 0.00671215, box: 232,61,710,889
-Tracker: Tracking lost, last confidence: 0.00671215
+#include "Output/mavlink_types.h" // For mavlink_message_t, mavlink_channel_t etc.
+#include "Output/minimal/mavlink_msg_heartbeat.h" // For HEARTBEAT message specifics
+// #include "Output/common/common.hpp" // Or this if you need messages from the common set
+// Depending on your setup, mavlink_helpers.h might be included by protocol.h or directly.
+// protocol.h includes mavlink_helpers.h by default if MAVLINK_SEPARATE_HELPERS is not defined.
+#include "Output/protocol.h"
+    
+    // 1. Create a MAVLink message container
+    mavlink_message_t msg;
+    uint8_t send_buffer[MAVLINK_MAX_PACKET_LEN]; // Buffer to hold the serialized message
+
+    // 2. Populate the HEARTBEAT message fields
+    // These values are examples. Refer to the MAVLink documentation for MAV_TYPE, MAV_AUTOPILOT, etc.
+    uint8_t vehicle_type = 6;    // MAV_TYPE_QUADROTOR (from enum MAV_TYPE in your dialect header, e.g. common.h)
+    uint8_t autopilot_type = 8;  // MAV_AUTOPILOT_ARDUPILOTMEGA (from enum MAV_AUTOPILOT)
+    uint8_t base_mode = 0;       // MAV_MODE_FLAG_CUSTOM_MODE_ENABLED bit might be set if custom_mode is used
+                                 // Or MAV_MODE_FLAG_SAFETY_ARMED, MAV_MODE_FLAG_MANUAL_INPUT_ENABLED etc.
+                                 // See MAV_MODE_FLAG enum
+    uint32_t custom_mode = 0;    // Autopilot-specific custom mode.
+    uint8_t system_status = 4;   // MAV_STATE_ACTIVE (from enum MAV_STATE)
+
+    // --- Method A: Using the _pack function (Recommended for clarity and control) ---
+    // This function packs the data into the mavlink_message_t structure.
+    // It also handles sequence numbers internally if mavlink_status_t is used,
+    // or you can manage sequence numbers per channel yourself.
+    // The last parameter is MAVLINK_MSG_ID_HEARTBEAT_CRC (50 for heartbeat).
+    // The mavlink_finalize_message function (called by pack) handles the CRC.
+
+    std::cout << "Sending HEARTBEAT using _pack method:" << std::endl;
+    mavlink_msg_heartbeat_pack(
+        system_id,          // Your System ID
+        component_id,       // Your Component ID
+        &msg,               // Pointer to the MAVLink message_t
+        vehicle_type,
+        autopilot_type,
+        base_mode,
+        custom_mode,
+        system_status
+        // mavlink_version field is automatically set by the pack function
+    );

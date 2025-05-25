@@ -1,0 +1,31 @@
+# Camera settings
+[camera]
+resolution_index=0
+width=640
+height=640
+frame_rate=20
+
+# Detection settings
+[detection]
+mode=1 #mode 0 interval
+interval=8000
+# Selection strategy: 0=highest confidence, 1=upper box, 2=lower box, 3=rightmost, 4=leftmost
+selection_strategy=4
+
+# Tracking settings
+[tracking]
+mode=0
+interval=1
+# Tracker type: 0 for VitTracker, 1 for SiamFCPP tracker
+tracker_type= 1
+
+# General settings
+[general]
+target_class_id=0
+
+#model path
+yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov12m.onnx
+coco_names_path=/home/pi5/shared_folder/aiPlatform/models/coco.names
+vittracker_model_path=/home/pi5/shared_folder/aiPlatform/models/vittracker.onnx
+siamfc_feature_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracker_feature.onnx
+siamfc_tracking_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracking.onnx
