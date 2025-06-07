@@ -5,6 +5,7 @@
 #include "include/siamfc_pp_tracker.h"
 #include "include/control_unit.h"
 #include "include/config_utils.h"
+#include "include/selection_strategy.h"
 #include <thread>
 #include <atomic>
 #include <iostream>
@@ -19,78 +20,23 @@ void signalHandler(int) {
     if (g_running) g_running->store(false);
 }
 
-// Updated to use ControlUnit and support multiple selection strategies
-void processDetections(const std::vector<model::Detection>& detections, const cv::Mat& frame, uint64_t frameSeq, ControlUnit& controlUnit, int selectionStrategy) {
+// Updated to use SelectionStrategy
+void processDetections(const std::vector<model::Detection>& detections, const cv::Mat& frame, 
+                    uint64_t frameSeq, ControlUnit& controlUnit, int selectionStrategy) {
     if (detections.empty()) {
         controlUnit.clearDetection();
         return;
     }
 
+    // Create strategy using factory
+    auto strategy = SelectionStrategyFactory::createStrategy(selectionStrategy);
+    
     cv::Rect selectedBox;
-    float selectedConf = -1.0f;
-    int selectedClassId = -1;
+    float selectedConf;
+    int selectedClassId;
     
-    // Strategy 0: Highest confidence (default)
-    if (selectionStrategy == 0) {
-        for (const auto &det : detections) {
-            if (det.confidence > selectedConf) {
-                selectedConf = det.confidence;
-                selectedBox = det.box;
-                selectedClassId = det.classId;
-            }
-        }
-    }
-    // Strategy 1: Upper bounding box (smallest y coordinate)
-    else if (selectionStrategy == 1) {
-        int minY = INT_MAX;
-        for (const auto &det : detections) {
-            if (det.confidence > 0.15f && det.box.y < minY) {
-                minY = det.box.y;
-                selectedBox = det.box;
-                selectedConf = det.confidence;
-                selectedClassId = det.classId;
-            }
-        }
-    }
-    // Strategy 2: Lower bounding box (largest y coordinate)
-    else if (selectionStrategy == 2) {
-        int maxY = -1;
-        for (const auto &det : detections) {
-            if (det.confidence > 0.15f && det.box.y > maxY) {
-                maxY = det.box.y;
-                selectedBox = det.box;
-                selectedConf = det.confidence;
-                selectedClassId = det.classId;
-            }
-        }
-    }
-    // Strategy 3: Rightmost bounding box (largest x coordinate)
-    else if (selectionStrategy == 3) {
-        int maxX = -1;
-        for (const auto &det : detections) {
-            if (det.confidence > 0.15f && det.box.x + det.box.width > maxX) {
-                maxX = det.box.x + det.box.width;
-                selectedBox = det.box;
-                selectedConf = det.confidence;
-                selectedClassId = det.classId;
-            }
-        }
-    }
-    // Strategy 4: Leftmost bounding box (smallest x coordinate)
-    else if (selectionStrategy == 4) {
-        int minX = INT_MAX;
-        for (const auto &det : detections) {
-            if (det.confidence > 0.15f && det.box.x < minX) {
-                minX = det.box.x;
-                selectedBox = det.box;
-                selectedConf = det.confidence;
-                selectedClassId = det.classId;
-            }
-        }
-    }
-    
-    // Only set the detection if we found a valid one with confidence > 0.15
-    if (selectedConf > 0.15f) {
+    // Use strategy to select detection
+    if (strategy->selectDetection(detections, selectedBox, selectedConf, selectedClassId)) {
         controlUnit.setDetection(selectedBox, frame, frameSeq, selectedClassId);
     } else {
         controlUnit.clearDetection();
@@ -156,23 +102,12 @@ void threadYolo(model &yoloDetector, std::atomic<bool> &running, ControlUnit& co
         cv::Mat frame = frameData.image;
         if (frame.empty()) continue;
 
-        // Measure detection time
-        auto start = std::chrono::high_resolution_clock::now();
-
         // Run detection
         std::vector<model::Detection> detections = yoloDetector.detect(frame);
-
-        // Calculate and print detection time
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        std::cout << "YOLO detection time: " << duration << "ms" << std::endl;
 
         // Visualize detections
         visualizeDetections(frame, detections, classNames);
 
-        if (controlUnit.getDetectionMode() == 1) {
-            std::cout << "YOLO: Detected " << detections.size() << " objects" << std::endl;
-        }
         processDetections(detections, frame, frameData.sequence, controlUnit, selectionStrategy);
     }
 }
@@ -286,7 +221,7 @@ public:
         lastConfidence_ = confidence;
 
         // Check if tracking is still valid based on confidence and box validity
-        if (confidence < 0.1f || //
+        if (confidence < 0.25f || //
             result.width <= 0 || result.height <= 0 ||
             result.x < 0 || result.y < 0 ||
             result.x + result.width >= frame.cols ||
@@ -347,7 +282,7 @@ void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>
     int mode = controlUnit.getDetectionMode();
 
     while (running) {
-        // Wait for our turn to run tracking
+        // Wait for turn to run tracking
         if (!controlUnit.waitForTrackingTurn()) {
             continue;
         }
@@ -402,16 +337,16 @@ void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>
         bool trackerValid = false;
         if (isTracking) {
             try {
+                // Start timing
+                auto startTime = std::chrono::high_resolution_clock::now();
+                
                 lastTrackBox = tracker->update(frame);
+                
+                // End timing and calculate FPS
+                auto endTime = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime).count();
+                float currentFps = 1000000.0f / duration; // Convert microseconds to seconds for FPS
                 trackerValid = lastTrackBox.width > 0 && lastTrackBox.height > 0 && tracker->isInitialized();
-
-                // Print tracking box and confidence for debugging
-                if (trackerValid) {
-                    std::cout << "Tracking box: x=" << lastTrackBox.x << ", y=" << lastTrackBox.y
-                             << ", width=" << lastTrackBox.width << ", height=" << lastTrackBox.height
-                             << ", confidence=" << tracker->getLastConfidence() << std::endl;
-                }
-
                 if (!trackerValid) {
                     isTracking = false;
                     controlUnit.setTrackerFailed(true);
@@ -433,6 +368,10 @@ void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>
 
 int main() {
     try {
+        std::atomic<bool> running(true);
+        g_running = &running;
+        std::signal(SIGINT, signalHandler);
+
         ControlUnit controlUnit;
         CameraHandler cameraHandler(controlUnit);
 
@@ -494,10 +433,6 @@ int main() {
             tracker = std::make_unique<SiamFCPPAdapter2>(siamfcFeatureModelPath,
                                                          siamfcTrackingModelPath);
         }
-        // Set up atomic flag for signal handling
-        std::atomic<bool> running(true);
-        g_running = &running;
-        std::signal(SIGINT, signalHandler);
 
         // Print starting message
         std::cout << "Streaming... Press Ctrl+C to exit." << std::endl;
@@ -519,7 +454,6 @@ int main() {
         return 0;
 
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
 }

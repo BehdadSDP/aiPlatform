@@ -69,7 +69,7 @@ cv::Rect VitTracker::update(const cv::Mat& frame)
     }
 
     // Validate tracking results
-    if (!isLocated || trackScore_ < 0.3f) {
+    if (!isLocated || trackScore_ < 0.15f) {
         std::cout << "VitTracker: Tracking lost, score: " << trackScore_ << std::endl;
         initialized_ = false;
         trackScore_ = 0.0f;

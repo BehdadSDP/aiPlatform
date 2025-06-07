@@ -1,12 +1,9 @@
 #include "include/control_unit.h"
-#include <iostream>
 
 void ControlUnit::setDetectionMode(int mode) {
     if (mode == 0 || mode == 1) {
         detectionMode_ = mode;
-        std::cout << "Control Unit: Detection mode set to " << (mode == 0 ? "time-based" : "tracker-initialization-based") << std::endl;
     } else {
-        std::cerr << "Control Unit: Invalid detection mode " << mode << ". Using default (0)." << std::endl;
         detectionMode_ = 0;
     }
 }
@@ -15,7 +12,6 @@ void ControlUnit::setDetectionInterval(int milliseconds) {
     if (milliseconds > 0) {
         std::lock_guard<std::mutex> lock(syncMutex_);
         detectionInterval_ = milliseconds;
-        std::cout << "Control Unit: Detection interval set to " << detectionInterval_ << "ms" << std::endl;
     }
 }
 
@@ -23,12 +19,10 @@ void ControlUnit::setTrackingInterval(int milliseconds) {
     if (milliseconds > 0) {
         std::lock_guard<std::mutex> lock(syncMutex_);
         trackingInterval_ = milliseconds;
-        std::cout << "Control Unit: Tracking interval set to " << trackingInterval_ << "ms" << std::endl;
     }
 }
 
 void ControlUnit::notifyNewFrame() {
-    // Notify all waiting threads that a new frame is available
     detectionCV_.notify_one();
     trackingCV_.notify_one();
 }
@@ -37,22 +31,18 @@ bool ControlUnit::waitForDetectionTurn(int timeoutMs) {
     std::unique_lock<std::mutex> lock(syncMutex_);
     
     if (detectionMode_ == 0) {
-        // Time-based mode
         auto now = std::chrono::steady_clock::now();
         if (lastDetectionTime_ + std::chrono::milliseconds(detectionInterval_) > now) {
-            // Not time yet, wait with timeout
             return detectionCV_.wait_for(lock, std::chrono::milliseconds(timeoutMs), 
                 [this, now]() { 
                     return lastDetectionTime_ + std::chrono::milliseconds(detectionInterval_) <= now; 
                 });
         }
         
-        // Time to run detection
         lastDetectionTime_ = now;
         return true;
     }
     else {
-        // Mode 1: Check if tracker has failed or no valid detection
         bool shouldRun;
         {
             std::lock_guard<std::mutex> detLock(detectionMutex_);
@@ -60,7 +50,6 @@ bool ControlUnit::waitForDetectionTurn(int timeoutMs) {
         }
         
         if (!shouldRun) {
-            // Wait for a signal with timeout
             return detectionCV_.wait_for(lock, std::chrono::milliseconds(timeoutMs),
                 [this]() {
                     std::lock_guard<std::mutex> detLock(detectionMutex_);
@@ -77,14 +66,12 @@ bool ControlUnit::waitForTrackingTurn(int timeoutMs) {
     
     auto now = std::chrono::steady_clock::now();
     if (lastTrackingTime_ + std::chrono::milliseconds(trackingInterval_) > now) {
-        // Not time yet, wait with timeout
         return trackingCV_.wait_for(lock, std::chrono::milliseconds(timeoutMs),
             [this, now]() {
                 return lastTrackingTime_ + std::chrono::milliseconds(trackingInterval_) <= now;
             });
     }
     
-    // Time to run tracking
     lastTrackingTime_ = now;
     return true;
 }
@@ -108,7 +95,6 @@ void ControlUnit::setTrackerFailed(bool failed) {
     std::lock_guard<std::mutex> lock(detectionMutex_);
     trackerFailed_ = failed;
     if (failed) {
-        // Notify detection thread immediately
         detectionCV_.notify_one();
     }
 }
@@ -121,9 +107,8 @@ void ControlUnit::setDetection(const cv::Rect& box, const cv::Mat& frame, uint64
     detection_.classId = classId;
     detection_.valid = true;
     detection_.newDetection = true;
-    trackerFailed_ = false; // Clear on new detection
+    trackerFailed_ = false;
     
-    // Notify tracking thread immediately
     trackingCV_.notify_one();
 }
 

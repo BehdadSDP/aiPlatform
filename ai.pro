@@ -14,7 +14,7 @@ SOURCES += \
     src/main.cpp \
     src/model.cpp \
     src/siamfc_pp_tracker.cpp \
-    src/vittracker.cpp
+    src/vittracker.cpp \
 
 # Add libcamera and dependencies
 LIBS += -L/usr/lib -lcamera -lcamera-base -lpisp -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_videoio -lopencv_imgcodecs -lopencv_dnn -lcamera
@@ -28,10 +28,10 @@ LIBS += -L/usr/local/lib \
         -lopencv_imgcodecs \
         -lopencv_dnn \
         -lopencv_tracking \
-        -lopencv_video \  # Try adding this
-        -lopencv_objdetect \  # Sometimes needed
-        -lopencv_ml \  # Sometimes needed
-        -lopencv_gapi  # Required for some newer tracking algorithms
+        -lopencv_video \
+        -lopencv_objdetect \
+        -lopencv_ml \
+        -lopencv_gapi
 
 INCLUDEPATH += /usr/include/libcamera
 INCLUDEPATH += /usr/local/include/opencv4
@@ -49,8 +49,10 @@ HEADERS += \
     include/camera_handler.h \
     include/config_utils.h \
     include/control_unit.h \
+    include/detector.h \
     include/frame_buffer_manager.h \
     include/model.h \
+    include/selection_strategy.h \
     include/siamfc_pp_tracker.h \
     include/vittracker.h \
     include/Output/mavlink_types.h \

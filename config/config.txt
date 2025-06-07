@@ -1,6 +1,6 @@
 # Camera settings
 [camera]
-resolution_index=0
+resolution_index=4
 width=640
 height=640
 frame_rate=20
@@ -21,10 +21,10 @@ tracker_type= 1
 
 # General settings
 [general]
-target_class_id=0
+target_class_id=74
 
 #model path
-yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov12m.onnx
+yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov12n.onnx
 coco_names_path=/home/pi5/shared_folder/aiPlatform/models/coco.names
 vittracker_model_path=/home/pi5/shared_folder/aiPlatform/models/vittracker.onnx
 siamfc_feature_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracker_feature.onnx

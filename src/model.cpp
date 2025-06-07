@@ -104,7 +104,7 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
     // This is the internal threshold used BEFORE NMS
     // You mentioned lowering this helped with distant objects
     const float SCORE_THRESHOLD = 0.2f;
-    const float NMS_THRESHOLD = 0.45f;
+    const float NMS_THRESHOLD = 0.2f;
 
     // Step 1: Preprocess frame into blob
     cv::Mat blob;
@@ -216,7 +216,7 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
         // Filter based on confidence threshold AND target class
         // Note: Using the internal SCORE_THRESHOLD here.
         // Note: Using the member variable targetClassId_ for filtering.
-        if (confidence >= SCORE_THRESHOLD && class_id != -1 && (targetClassId_ == -1 || class_id == targetClassId_))
+        if (confidence >= SCORE_THRESHOLD /*&& class_id != -1 && (targetClassId_ == -1 || class_id == targetClassId_)*/)
         {
              // Convert [cx, cy, w, h] (relative to 640x640 input)
              // to [left, top, width, height] (relative to original frame)
