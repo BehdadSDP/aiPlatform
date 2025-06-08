@@ -1,4 +1,11 @@
-# Camera settings
+# Input settings
+[input]
+# Input type: 0 for camera, 1 for video file
+input_type=1
+# Video file path (used when input_type=1)
+video_path=/home/pi5/shared_folder/aiPlatform/test/test_road.mp4
+
+# Camera settings (used when input_type=0)
 [camera]
 resolution_index=4
 width=640
@@ -10,22 +17,40 @@ frame_rate=20
 mode=1 #mode 0 interval
 interval=8000
 # Selection strategy: 0=highest confidence, 1=upper box, 2=lower box, 3=rightmost, 4=leftmost
-selection_strategy=4
+selection_strategy=0
 
 # Tracking settings
 [tracking]
 mode=0
 interval=1
 # Tracker type: 0 for VitTracker, 1 for SiamFCPP tracker
-tracker_type= 1
+tracker_type= 0
+
+# Visualization settings
+[visualization]
+# Enable path tracing: 0=disabled, 1=enabled
+show_tracking_path=1
+# Maximum path points to store (default: 50)
+max_path_points=50
 
 # General settings
 [general]
-target_class_id=74
+target_class_id=0
 
-#model path
+# Detection model configuration
+[detection_model]
+# Model type: 0=COCO general detection, 1=helmet detection
+model_type=0
+
+#model paths
 yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov12n.onnx
 coco_names_path=/home/pi5/shared_folder/aiPlatform/models/coco.names
+
+# Helmet detection model paths (used when model_type=1)
+helmet_model_path=/home/pi5/shared_folder/aiPlatform/models/helmet_yolov8n.onnx
+helmet_names_path=/home/pi5/shared_folder/aiPlatform/models/helmet.names
+
+# Tracker model paths
 vittracker_model_path=/home/pi5/shared_folder/aiPlatform/models/vittracker.onnx
 siamfc_feature_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracker_feature.onnx
 siamfc_tracking_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracking.onnx

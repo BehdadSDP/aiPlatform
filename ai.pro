@@ -8,11 +8,14 @@ CONFIG -= app_bundle
 
 SOURCES += \
     src/camera_handler.cpp \
+    src/video_handler.cpp \
     src/config_utils.cpp \
     src/control_unit.cpp \
     src/frame_buffer_manager.cpp \
     src/main.cpp \
     src/model.cpp \
+    src/model_manager.cpp \
+    src/resource_monitor.cpp \
     src/siamfc_pp_tracker.cpp \
     src/vittracker.cpp \
 
@@ -33,6 +36,9 @@ LIBS += -L/usr/local/lib \
         -lopencv_ml \
         -lopencv_gapi
 
+# Add filesystem library for C++17
+LIBS += -lstdc++fs
+
 INCLUDEPATH += /usr/include/libcamera
 INCLUDEPATH += /usr/local/include/opencv4
 INCLUDEPATH += /home/pi5/shared_folder/aiPlatform/include/Output
@@ -47,11 +53,13 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 HEADERS += \
     include/camera_handler.h \
+    include/video_handler.h \
     include/config_utils.h \
     include/control_unit.h \
-    include/detector.h \
     include/frame_buffer_manager.h \
     include/model.h \
+    include/model_manager.h \
+    include/resource_monitor.h \
     include/selection_strategy.h \
     include/siamfc_pp_tracker.h \
     include/vittracker.h \

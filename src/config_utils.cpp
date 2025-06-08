@@ -53,6 +53,7 @@ std::map<std::string, std::string> loadConfig(const std::string& filename) {
     }
 
     const std::vector<std::string> required_keys = {
+        "input.input_type",
         "camera.resolution_index",
         "camera.width",
         "camera.height",
@@ -62,11 +63,20 @@ std::map<std::string, std::string> loadConfig(const std::string& filename) {
         "detection.selection_strategy",
         "tracking.mode",
         "tracking.interval",
-        "general.target_class_id"
+        "general.target_class_id",
+        "detection_model.model_type"
     };
     for (const auto& key : required_keys) {
         if (config.find(key) == config.end()) {
             throw std::runtime_error("Missing required config key: " + key);
+        }
+    }
+    
+    // Additional validation for video input
+    if (config.find("input.input_type") != config.end()) {
+        int inputType = std::stoi(config.at("input.input_type"));
+        if (inputType == 1 && config.find("input.video_path") == config.end()) {
+            throw std::runtime_error("Missing required config key for video input: input.video_path");
         }
     }
 

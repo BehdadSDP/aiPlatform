@@ -1,11 +1,14 @@
 #include "include/camera_handler.h"
+#include "include/video_handler.h"
 #include "include/frame_buffer_manager.h"
 #include "include/model.h"
+#include "include/model_manager.h"
 #include "include/vittracker.h"
 #include "include/siamfc_pp_tracker.h"
 #include "include/control_unit.h"
 #include "include/config_utils.h"
 #include "include/selection_strategy.h"
+#include "include/resource_monitor.h"
 #include <thread>
 #include <atomic>
 #include <iostream>
@@ -13,6 +16,7 @@
 #include <memory>
 #include <fstream>
 #include <vector>
+#include <filesystem>
 
 std::atomic<bool>* g_running = nullptr;
 
@@ -43,7 +47,7 @@ void processDetections(const std::vector<model::Detection>& detections, const cv
     }
 }
 
-// Add this new function to visualize detections
+// Enhanced function to visualize detections with helmet-specific coloring
 void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& detections, const std::vector<std::string>& classNames) {
     if (frame.empty() || detections.empty()) return;
 
@@ -51,25 +55,44 @@ void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& de
 
     for (const auto& det : detections) {
         if (det.confidence > 0.15f) {
-            // Draw box
-            cv::rectangle(displayFrame, det.box, cv::Scalar(0, 255, 0), 2);
-
-            // Create label with class name and confidence
+            // Get class name
             std::string className = (det.classId >= 0 && det.classId < static_cast<int>(classNames.size())) ?
                                    classNames[det.classId] : "Unknown";
-            std::string label = className + ": " + std::to_string(int(det.confidence * 100)) + "%";
+            
+            // Determine box color based on class (helmet safety)
+            cv::Scalar boxColor;
+            std::string statusText = "";
+            
+            if (className == "helmet" || className == "hardhat") {
+                boxColor = cv::Scalar(0, 255, 0); // Green for safe
+                statusText = " ✓ SAFE";
+            } else if (className == "no-helmet" || className == "head") {
+                boxColor = cv::Scalar(0, 0, 255); // Red for unsafe
+                statusText = " ⚠ VIOLATION";
+            } else if (className == "person") {
+                boxColor = cv::Scalar(255, 165, 0); // Orange for person
+                statusText = " - Person";
+            } else {
+                boxColor = cv::Scalar(0, 255, 255); // Yellow for other classes
+            }
+            
+            // Draw box with appropriate color
+            cv::rectangle(displayFrame, det.box, boxColor, 3);
+
+            // Create label with class name, confidence, and status
+            std::string label = className + ": " + std::to_string(int(det.confidence * 100)) + "%" + statusText;
 
             // Add text with background
             int baseline = 0;
-            cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+            cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.6, 2, &baseline);
             cv::rectangle(displayFrame,
-                         cv::Point(det.box.x, det.box.y - textSize.height - 5),
+                         cv::Point(det.box.x, det.box.y - textSize.height - 10),
                          cv::Point(det.box.x + textSize.width, det.box.y),
-                         cv::Scalar(0, 255, 0), -1);
+                         boxColor, -1);
 
             cv::putText(displayFrame, label,
                        cv::Point(det.box.x, det.box.y - 5),
-                       cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
+                       cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
         }
     }
 
@@ -85,8 +108,8 @@ void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& de
     cv::waitKey(1);
 }
 
-// Updated YOLO detection thread with timing measurement
-void threadYolo(model &yoloDetector, std::atomic<bool> &running, ControlUnit& controlUnit, const std::vector<std::string>& classNames, int selectionStrategy) {
+// Updated YOLO detection thread with timing measurement using ModelManager
+void threadYolo(ModelManager &modelManager, std::atomic<bool> &running, ControlUnit& controlUnit, int selectionStrategy) {
     while (running) {
         // Wait for our turn to run detection
         if (!controlUnit.waitForDetectionTurn()) {
@@ -103,7 +126,10 @@ void threadYolo(model &yoloDetector, std::atomic<bool> &running, ControlUnit& co
         if (frame.empty()) continue;
 
         // Run detection
-        std::vector<model::Detection> detections = yoloDetector.detect(frame);
+        std::vector<model::Detection> detections = modelManager.detect(frame);
+
+        // Get class names from model manager
+        const std::vector<std::string>& classNames = modelManager.getClassNames();
 
         // Visualize detections
         visualizeDetections(frame, detections, classNames);
@@ -112,28 +138,78 @@ void threadYolo(model &yoloDetector, std::atomic<bool> &running, ControlUnit& co
     }
 }
 
-// Updated visualization function
+// Enhanced visualization function with path tracing
 void visualizeTracking(cv::Mat& frame, bool isTracking, bool trackerValid, const cv::Rect& lastTrackBox) {
     if (frame.empty()) return;
 
     cv::Mat displayFrame = frame.clone(); // Create a copy for display
-
+    
+    // Static variables to store tracking path
+    static std::vector<cv::Point> trackingPath;
+    static const int MAX_PATH_POINTS = 50; // Maximum number of path points to store
+    static cv::Scalar pathColor = cv::Scalar(255, 100, 0); // Orange color for path
+    
     if (isTracking && trackerValid) {
-        // Draw box with thicker lines for better visibility
-        cv::rectangle(displayFrame, lastTrackBox, cv::Scalar(0, 0, 255), 2);
+        // Calculate center point of current tracking box
+        cv::Point currentCenter(lastTrackBox.x + lastTrackBox.width / 2, 
+                               lastTrackBox.y + lastTrackBox.height / 2);
+        
+        // Add current center to tracking path
+        trackingPath.push_back(currentCenter);
+        
+        // Limit path size to prevent memory growth
+        if (trackingPath.size() > MAX_PATH_POINTS) {
+            trackingPath.erase(trackingPath.begin());
+        }
+        
+        // Draw tracking path with gradually fading lines
+        if (trackingPath.size() > 1) {
+            for (size_t i = 1; i < trackingPath.size(); ++i) {
+                // Calculate alpha/thickness based on position in path (newer = thicker/brighter)
+                float alpha = static_cast<float>(i) / trackingPath.size();
+                int thickness = static_cast<int>(1 + alpha * 3); // 1-4 pixel thickness
+                
+                // Create fading color effect
+                cv::Scalar fadeColor = pathColor * alpha;
+                
+                // Draw line segment
+                cv::line(displayFrame, trackingPath[i-1], trackingPath[i], fadeColor, thickness);
+            }
+            
+            // Draw path points as small circles
+            for (size_t i = 0; i < trackingPath.size(); ++i) {
+                float alpha = static_cast<float>(i) / trackingPath.size();
+                int radius = static_cast<int>(2 + alpha * 3); // 2-5 pixel radius
+                cv::Scalar pointColor = pathColor * alpha;
+                cv::circle(displayFrame, trackingPath[i], radius, pointColor, -1);
+            }
+        }
+        
+        // Draw current tracking box with thicker lines for better visibility
+        cv::rectangle(displayFrame, lastTrackBox, cv::Scalar(0, 0, 255), 3);
 
-        // Add text with background for better visibility
-        std::string label = "Tracking";
+        // Add enhanced text with path info
+        std::string label = "Tracking (Path: " + std::to_string(trackingPath.size()) + " points)";
         int baseline = 0;
-        cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.7, 2, &baseline);
+        cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.6, 2, &baseline);
         cv::rectangle(displayFrame,
-                     cv::Point(lastTrackBox.x, lastTrackBox.y - textSize.height - 5),
+                     cv::Point(lastTrackBox.x, lastTrackBox.y - textSize.height - 10),
                      cv::Point(lastTrackBox.x + textSize.width, lastTrackBox.y),
                      cv::Scalar(0, 0, 255), -1);
 
         cv::putText(displayFrame, label,
                    cv::Point(lastTrackBox.x, lastTrackBox.y - 5),
-                   cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 2);
+                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
+                   
+        // Draw current position marker (bright circle at current center)
+        cv::circle(displayFrame, currentCenter, 6, cv::Scalar(0, 255, 255), 2); // Yellow circle
+        cv::circle(displayFrame, currentCenter, 3, cv::Scalar(255, 255, 255), -1); // White center
+        
+    } else {
+        // Clear path when tracking is lost
+        if (!isTracking) {
+            trackingPath.clear();
+        }
     }
 
     // Make sure window is created before showing image
@@ -276,7 +352,7 @@ private:
 
 // Updated tracker thread to use the abstract interface
 void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>& tracker,
-                  const std::vector<std::string>& classNames, ControlUnit& controlUnit) {
+                  ModelManager& modelManager, ControlUnit& controlUnit) {
     bool isTracking = false;
     cv::Rect lastTrackBox;
     int mode = controlUnit.getDetectionMode();
@@ -312,6 +388,9 @@ void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>
 
                     isTracking = true;
                     lastTrackBox = yoloBox;
+                    
+                    // Get class names from model manager
+                    const std::vector<std::string>& classNames = modelManager.getClassNames();
                     std::string className = (classId >= 0 && classId < static_cast<int>(classNames.size())) ?
                                           classNames[classId] : "Unknown";
                     std::cout << "Tracker: Initialized, Class: " << className << std::endl;
@@ -368,15 +447,34 @@ void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>
 
 int main() {
     try {
+        // Ensure logs directory exists with proper permissions
+        std::filesystem::path logsDir("logs");
+        if (!std::filesystem::exists(logsDir)) {
+            std::filesystem::create_directories(logsDir);
+            std::filesystem::permissions(logsDir, 
+                std::filesystem::perms::owner_all | 
+                std::filesystem::perms::group_read | 
+                std::filesystem::perms::others_read);
+        }
+
         std::atomic<bool> running(true);
         g_running = &running;
         std::signal(SIGINT, signalHandler);
 
-        ControlUnit controlUnit;
-        CameraHandler cameraHandler(controlUnit);
+        // Start resource monitoring with absolute path
+        std::string logPath = std::filesystem::absolute(logsDir / "resource_usage.csv").string();
+        std::cout << "Starting resource monitoring, log file: " << logPath << std::endl;
+        ResourceMonitor::getInstance().startMonitoring(logPath, 30); // Log every 30 seconds
 
+        ControlUnit controlUnit;
+        
         // Config related code
         auto config = config_utils::loadConfig("/home/pi5/shared_folder/aiPlatform/config/config.txt");
+        
+        // Get input type configuration
+        int inputType = config_utils::getConfigInt(config, "input.input_type");
+        
+        // Camera settings (used when input_type = 0)
         int resolutionIndex = config_utils::getConfigInt(config, "camera.resolution_index");
         int customWidth = config_utils::getConfigInt(config, "camera.width");
         int customHeight = config_utils::getConfigInt(config, "camera.height");
@@ -387,39 +485,65 @@ int main() {
         int targetClassId = config_utils::getConfigInt(config, "general.target_class_id");
         int trackerType = config_utils::getConfigInt(config, "tracking.tracker_type");
         int selectionStrategy = config_utils::getConfigInt(config, "detection.selection_strategy");
+        int modelType = config_utils::getConfigInt(config, "detection_model.model_type");
 
-        // Read file paths from config
-        std::string yoloModelPath = config_utils::getConfigString(config, "general.yolo_model_path");
-        std::string cocoNamesPath = config_utils::getConfigString(config, "general.coco_names_path");
-        std::string vitTrackerModelPath = config_utils::getConfigString(config, "general.vittracker_model_path");
-        std::string siamfcFeatureModelPath = config_utils::getConfigString(config, "general.siamfc_feature_model_path");
-        std::string siamfcTrackingModelPath = config_utils::getConfigString(config, "general.siamfc_tracking_model_path");
+        // Read file paths from config based on model type
+        std::string yoloModelPath, classNamesPath;
+        if (modelType == 0) {
+            // COCO general detection
+            yoloModelPath = config_utils::getConfigString(config, "detection_model.yolo_model_path");
+            classNamesPath = config_utils::getConfigString(config, "detection_model.coco_names_path");
+        } else if (modelType == 1) {
+            // Helmet detection
+            yoloModelPath = config_utils::getConfigString(config, "detection_model.helmet_model_path");
+            classNamesPath = config_utils::getConfigString(config, "detection_model.helmet_names_path");
+        } else {
+            throw std::runtime_error("Invalid model type: " + std::to_string(modelType));
+        }
+        
+        std::string vitTrackerModelPath = config_utils::getConfigString(config, "detection_model.vittracker_model_path");
+        std::string siamfcFeatureModelPath = config_utils::getConfigString(config, "detection_model.siamfc_feature_model_path");
+        std::string siamfcTrackingModelPath = config_utils::getConfigString(config, "detection_model.siamfc_tracking_model_path");
 
-        // Initialize CameraHandler
-        cameraHandler.initialize();
-        cameraHandler.acquireCamera();
-        cameraHandler.configureCamera(resolutionIndex, customWidth, customHeight);
-        cameraHandler.setFrameRate(frameRate);
+        // Initialize input source based on configuration
+        std::unique_ptr<CameraHandler> cameraHandler;
+        std::unique_ptr<VideoHandler> videoHandler;
+        
+        if (inputType == 0) {
+            // Camera input
+            std::cout << "Using camera input" << std::endl;
+            cameraHandler = std::make_unique<CameraHandler>(controlUnit);
+            cameraHandler->initialize();
+            cameraHandler->acquireCamera();
+            cameraHandler->configureCamera(resolutionIndex, customWidth, customHeight);
+            cameraHandler->setFrameRate(frameRate);
+            cameraHandler->startStreaming();
+        } else if (inputType == 1) {
+            // Video input
+            std::cout << "Using video input" << std::endl;
+            std::string videoPath = config_utils::getConfigString(config, "input.video_path");
+            videoHandler = std::make_unique<VideoHandler>(controlUnit);
+            videoHandler->initialize(videoPath);
+            videoHandler->startStreaming();
+        } else {
+            throw std::runtime_error("Invalid input type: " + std::to_string(inputType) + ". Use 0 for camera, 1 for video.");
+        }
 
         // Configure ControlUnit
         controlUnit.setDetectionMode(detectionMode);
         controlUnit.setDetectionInterval(detectionInterval);
         controlUnit.setTrackingInterval(trackingInterval);
 
-        // Start camera streaming
-        cameraHandler.startStreaming();
-
-        // Create model
-        model yoloDetector(yoloModelPath,
-                           cocoNamesPath,
-                           targetClassId);
-
-        // Load class names for visualization purposes
-        std::vector<std::string> classNames;
-        std::ifstream classFile(cocoNamesPath);
-        std::string className;
-        while (std::getline(classFile, className)) {
-            classNames.push_back(className);
+        // Create and initialize ModelManager
+        ModelManager modelManager;
+        ModelConfig modelConfig;
+        modelConfig.type = static_cast<ModelType>(modelType);
+        modelConfig.modelPath = yoloModelPath;
+        modelConfig.classNamesPath = classNamesPath;
+        modelConfig.targetClassId = targetClassId;
+        
+        if (!modelManager.initialize(modelConfig)) {
+            throw std::runtime_error("Failed to initialize ModelManager");
         }
 
         // Set up the appropriate tracker based on configuration
@@ -438,22 +562,31 @@ int main() {
         std::cout << "Streaming... Press Ctrl+C to exit." << std::endl;
 
         // Start worker threads
-        std::thread yoloThread(threadYolo, std::ref(yoloDetector), std::ref(running),
-                              std::ref(controlUnit), std::ref(classNames), selectionStrategy);
+        std::thread yoloThread(threadYolo, std::ref(modelManager), std::ref(running),
+                              std::ref(controlUnit), selectionStrategy);
 
         std::thread trackerThread(threadTracker, std::ref(running), std::ref(tracker),
-                                 std::ref(classNames), std::ref(controlUnit));
+                                 std::ref(modelManager), std::ref(controlUnit));
 
         // Join threads when done
         yoloThread.join();
         trackerThread.join();
 
-        // Clean up
-        cameraHandler.cleanup();
+        // Clean up input sources
+        if (cameraHandler) {
+            cameraHandler->cleanup();
+        }
+        if (videoHandler) {
+            videoHandler->cleanup();
+        }
         std::cout << "Cleanup complete." << std::endl;
-        return 0;
 
+        // Cleanup
+        ResourceMonitor::getInstance().stopMonitoring();
+        return 0;
     } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        ResourceMonitor::getInstance().stopMonitoring();
         return 1;
     }
 }
