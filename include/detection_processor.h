@@ -1,8 +1,8 @@
 #pragma once
 
 #include "include/model.h"
-#include "control_unit.h"
-#include "selection_strategy.h"
+#include "include/control_unit.h"
+#include "include/selection_strategy.h"
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <memory>

@@ -29,7 +29,7 @@ tracker_type= 1
 # Visualization settings
 [visualization]
 # Enable path tracing: 0=disabled, 1=enabled
-show_tracking_path=1
+show_tracking_path=0
 # Maximum path points to store (default: 50)
 max_path_points=50
 

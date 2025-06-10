@@ -1,8 +1,11 @@
 #include "include/camera_handler.h"
 #include "include/video_handler.h"
+#include "include/frame_buffer_manager.h"
+#include "include/model.h"
 #include "include/model_manager.h"
 #include "include/control_unit.h"
 #include "include/config_utils.h"
+#include "include/selection_strategy.h"
 #include "include/resource_monitor.h"
 #include "include/tracker_factory.h"
 #include "include/tracker_manager.h"
@@ -36,11 +39,12 @@ void threadYolo(ModelManager &modelManager, std::atomic<bool> &running, ControlU
 
 
 
+
 // Simple wrapper function for the tracker thread
 void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>& tracker,
-                  ModelManager& modelManager, ControlUnit& controlUnit) {
+                  ModelManager& modelManager, ControlUnit& controlUnit, bool showTrackingPath) {
     // Create tracker manager and run the tracking loop
-    TrackerManager trackerManager(std::move(tracker));
+    TrackerManager trackerManager(std::move(tracker), showTrackingPath);
     trackerManager.runTrackingLoop(running, modelManager, controlUnit);
 }
 
@@ -86,6 +90,7 @@ int main() {
         int trackerType = config_utils::getConfigInt(config, "tracking.tracker_type");
         int selectionStrategy = config_utils::getConfigInt(config, "detection.selection_strategy");
         int modelType = config_utils::getConfigInt(config, "detection_model.model_type");
+        bool showTrackingPath = config_utils::getConfigInt(config, "visualization.show_tracking_path") == 1;
 
         // Read file paths from config based on model type
         std::string yoloModelPath, classNamesPath;
@@ -157,13 +162,14 @@ int main() {
 
         // Print starting message
         std::cout << "Streaming... Press Ctrl+C to exit." << std::endl;
+        std::cout << "Tracking path visualization: " << (showTrackingPath ? "ON" : "OFF") << std::endl;
 
         // Start worker threads
         std::thread yoloThread(threadYolo, std::ref(modelManager), std::ref(running),
                               std::ref(controlUnit), selectionStrategy);
 
         std::thread trackerThread(threadTracker, std::ref(running), std::ref(tracker),
-                                 std::ref(modelManager), std::ref(controlUnit));
+                                 std::ref(modelManager), std::ref(controlUnit), showTrackingPath);
 
         // Join threads when done
         yoloThread.join();

@@ -1,27 +1,21 @@
-03:36:33: Running steps for project ai...
-03:36:33: Configuration unchanged, skipping qmake step.
-03:36:33: Starting: "/usr/bin/make" -j4
-g++ -c -pipe -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DQT_QML_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o main.o ../shared_folder/aiPlatform/src/main.cpp
-In file included from ../shared_folder/aiPlatform/src/main.cpp:2:
-../shared_folder/aiPlatform/include/video_handler.h: In constructor ‘VideoHandler::VideoHandler(ControlUnit&)’:
-../shared_folder/aiPlatform/include/video_handler.h:53:18: warning: ‘VideoHandler::frameCount_’ will be initialized after [-Wreorder]
-   53 |     unsigned int frameCount_;
-      |                  ^~~~~~~~~~~
-../shared_folder/aiPlatform/include/video_handler.h:48:12: warning:   ‘double VideoHandler::fps_’ [-Wreorder]
-   48 |     double fps_;
-      |            ^~~~
-../shared_folder/aiPlatform/include/video_handler.h:21:14: warning:   when initialized here [-Wreorder]
-   21 |     explicit VideoHandler(ControlUnit& controlUnit)
-      |              ^~~~~~~~~~~~
-g++  -o ai camera_handler.o video_handler.o config_utils.o control_unit.o frame_buffer_manager.o main.o model.o model_manager.o resource_monitor.o siamfc_pp_tracker.o vittracker.o   -L/usr/lib -lcamera-base -lpisp -lcamera -L/usr/local/lib -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_videoio -lopencv_imgcodecs -lopencv_dnn -lopencv_tracking -lopencv_video -lopencv_objdetect -lopencv_ml -lopencv_gapi -lstdc++fs /usr/lib/aarch64-linux-gnu/libQt5Core.so -lpthread
-/usr/bin/ld: main.o: in function `threadTracker(std::atomic<bool>&, std::unique_ptr<TrackerInterface, std::default_delete<TrackerInterface> >&, ModelManager&, ControlUnit&)':
-/home/pi5/build-ai-Desktop-Debug/../shared_folder/aiPlatform/src/main.cpp:149: undefined reference to `TrackerManager::TrackerManager(std::unique_ptr<TrackerInterface, std::default_delete<TrackerInterface> >)'
-/usr/bin/ld: /home/pi5/build-ai-Desktop-Debug/../shared_folder/aiPlatform/src/main.cpp:150: undefined reference to `TrackerManager::runTrackingLoop(std::atomic<bool>&, ModelManager&, ControlUnit&)'
-/usr/bin/ld: main.o: in function `main':
-/home/pi5/build-ai-Desktop-Debug/../shared_folder/aiPlatform/src/main.cpp:262: undefined reference to `TrackerFactory::createTracker(TrackerConfig const&)'
-collect2: error: ld returned 1 exit status
-make: *** [Makefile:186: ai] Error 1
-03:36:39: The process "/usr/bin/make" exited with code 2.
-Error while building/deploying project ai (kit: Desktop)
-When executing step "Make"
-03:36:39: Elapsed time: 00:06.
+Starting resource monitoring, log file: /home/pi5/build-ai-Desktop-Debug/logs/resource_usage.csv
+Opening log file: /home/pi5/build-ai-Desktop-Debug/logs/resource_usage.csv
+Log file opened successfully
+Monitor loop started
+Resource monitoring started with interval: 30 seconds
+Config input.input_type = 0
+Config camera.resolution_index = 4
+Config camera.width = 640
+Config camera.height = 640
+Config camera.frame_rate = 20
+Config detection.interval = 8000
+Config tracking.interval = 1
+Config detection.mode = 1
+Config general.target_class_id = 0
+Config tracking.tracker_type = 1
+Config detection.selection_strategy = 0
+Config detection_model.model_type = 0
+Error: Config key missing: show_tracking_path
+Stopping resource monitoring...
+Waiting for monitor thread to finish...
+Press <RETURN> to close this window...

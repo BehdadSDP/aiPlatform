@@ -9,7 +9,7 @@
 
 class TrackerManager {
 public:
-    explicit TrackerManager(std::unique_ptr<TrackerInterface> tracker);
+    explicit TrackerManager(std::unique_ptr<TrackerInterface> tracker, bool showTrackingPath = true);
     
     void runTrackingLoop(std::atomic<bool>& running, ModelManager& modelManager, 
                         ControlUnit& controlUnit);
@@ -23,8 +23,9 @@ private:
     std::unique_ptr<TrackerInterface> tracker_;
     bool isTracking_ = false;
     cv::Rect lastTrackBox_;
+    bool showTrackingPath_ = true;
     
-    // Static variables for path tracking visualization
+    // Variables for path tracking visualization
     std::vector<cv::Point> trackingPath_;
     static const int MAX_PATH_POINTS = 50;
     cv::Scalar pathColor_ = cv::Scalar(255, 100, 0);

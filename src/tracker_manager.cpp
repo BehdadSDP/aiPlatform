@@ -3,8 +3,8 @@
 #include <iostream>
 #include <chrono>
 
-TrackerManager::TrackerManager(std::unique_ptr<TrackerInterface> tracker) 
-    : tracker_(std::move(tracker)) {}
+TrackerManager::TrackerManager(std::unique_ptr<TrackerInterface> tracker, bool showTrackingPath) 
+    : tracker_(std::move(tracker)), showTrackingPath_(showTrackingPath) {}
 
 void TrackerManager::runTrackingLoop(std::atomic<bool>& running, ModelManager& modelManager, 
                                     ControlUnit& controlUnit) {
@@ -112,37 +112,50 @@ void TrackerManager::visualizeTracking(const cv::Mat& frame) {
         cv::Point currentCenter(lastTrackBox_.x + lastTrackBox_.width / 2, 
                                lastTrackBox_.y + lastTrackBox_.height / 2);
         
-        // Add current center to tracking path
-        trackingPath_.push_back(currentCenter);
-        
-        // Limit path size to prevent memory growth
-        if (trackingPath_.size() > MAX_PATH_POINTS) {
-            trackingPath_.erase(trackingPath_.begin());
-        }
-        
-        // Draw tracking path with gradually fading lines
-        if (trackingPath_.size() > 1) {
-            for (size_t i = 1; i < trackingPath_.size(); ++i) {
-                float alpha = static_cast<float>(i) / trackingPath_.size();
-                int thickness = static_cast<int>(1 + alpha * 3);
-                cv::Scalar fadeColor = pathColor_ * alpha;
-                cv::line(displayFrame, trackingPath_[i-1], trackingPath_[i], fadeColor, thickness);
+        // Only manage tracking path if showTrackingPath_ is enabled
+        if (showTrackingPath_) {
+            // Add current center to tracking path
+            trackingPath_.push_back(currentCenter);
+            
+            // Limit path size to prevent memory growth
+            if (trackingPath_.size() > MAX_PATH_POINTS) {
+                trackingPath_.erase(trackingPath_.begin());
             }
             
-            // Draw path points as small circles
-            for (size_t i = 0; i < trackingPath_.size(); ++i) {
-                float alpha = static_cast<float>(i) / trackingPath_.size();
-                int radius = static_cast<int>(2 + alpha * 3);
-                cv::Scalar pointColor = pathColor_ * alpha;
-                cv::circle(displayFrame, trackingPath_[i], radius, pointColor, -1);
+            // Draw tracking path with gradually fading lines
+            if (trackingPath_.size() > 1) {
+                for (size_t i = 1; i < trackingPath_.size(); ++i) {
+                    float alpha = static_cast<float>(i) / trackingPath_.size();
+                    int thickness = static_cast<int>(1 + alpha * 3);
+                    cv::Scalar fadeColor = pathColor_ * alpha;
+                    cv::line(displayFrame, trackingPath_[i-1], trackingPath_[i], fadeColor, thickness);
+                }
+                
+                // Draw path points as small circles
+                for (size_t i = 0; i < trackingPath_.size(); ++i) {
+                    float alpha = static_cast<float>(i) / trackingPath_.size();
+                    int radius = static_cast<int>(2 + alpha * 3);
+                    cv::Scalar pointColor = pathColor_ * alpha;
+                    cv::circle(displayFrame, trackingPath_[i], radius, pointColor, -1);
+                }
             }
+            
+            // Draw current position marker only when path is enabled
+            cv::circle(displayFrame, currentCenter, 6, cv::Scalar(0, 255, 255), 2);
+            cv::circle(displayFrame, currentCenter, 3, cv::Scalar(255, 255, 255), -1);
         }
         
-        // Draw current tracking box
+        // Always draw current tracking box
         cv::rectangle(displayFrame, lastTrackBox_, cv::Scalar(0, 0, 255), 3);
 
-        // Add text with path info
-        std::string label = "Tracking (Path: " + std::to_string(trackingPath_.size()) + " points)";
+        // Add text with path info (show different text based on path setting)
+        std::string label;
+        if (showTrackingPath_) {
+            label = "Tracking (Path: " + std::to_string(trackingPath_.size()) + " points)";
+        } else {
+            label = "Tracking (Path: OFF)";
+        }
+        
         int baseline = 0;
         cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.6, 2, &baseline);
         cv::rectangle(displayFrame,
@@ -153,10 +166,6 @@ void TrackerManager::visualizeTracking(const cv::Mat& frame) {
         cv::putText(displayFrame, label,
                    cv::Point(lastTrackBox_.x, lastTrackBox_.y - 5),
                    cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
-                   
-        // Draw current position marker
-        cv::circle(displayFrame, currentCenter, 6, cv::Scalar(0, 255, 255), 2);
-        cv::circle(displayFrame, currentCenter, 3, cv::Scalar(255, 255, 255), -1);
     } else {
         // Clear path when not tracking
         if (!isTracking_) {
