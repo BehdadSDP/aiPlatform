@@ -18,6 +18,13 @@ SOURCES += \
     src/resource_monitor.cpp \
     src/siamfc_pp_tracker.cpp \
     src/vittracker.cpp \
+    src/tracker_factory.cpp \
+    src/tracker_manager.cpp \
+    src/vit_tracker_adapter.cpp \
+    src/siamfc_tracker_adapter.cpp \
+    src/detection_manager.cpp \
+    src/detection_processor.cpp \
+    src/detection_visualizer.cpp \
 
 # Add libcamera and dependencies
 LIBS += -L/usr/lib -lcamera -lcamera-base -lpisp -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_videoio -lopencv_imgcodecs -lopencv_dnn -lcamera
@@ -63,6 +70,14 @@ HEADERS += \
     include/selection_strategy.h \
     include/siamfc_pp_tracker.h \
     include/vittracker.h \
+    include/tracker_interface.h \
+    include/tracker_factory.h \
+    include/tracker_manager.h \
+    include/vit_tracker_adapter.h \
+    include/siamfc_tracker_adapter.h \
+    include/detection_manager.h \
+    include/detection_processor.h \
+    include/detection_visualizer.h \
     include/Output/mavlink_types.h \
     include/Output/minimal/mavlink_msg_heartbeat.h \
     include/Output/protocol.h

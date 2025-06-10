@@ -1,7 +1,7 @@
 # Input settings
 [input]
 # Input type: 0 for camera, 1 for video file
-input_type=1
+input_type=0
 # Video file path (used when input_type=1)
 video_path=/home/pi5/shared_folder/aiPlatform/test/test_road.mp4
 
@@ -24,7 +24,7 @@ selection_strategy=0
 mode=0
 interval=1
 # Tracker type: 0 for VitTracker, 1 for SiamFCPP tracker
-tracker_type= 0
+tracker_type= 1
 
 # Visualization settings
 [visualization]
