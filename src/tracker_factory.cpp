@@ -7,11 +7,9 @@
 std::unique_ptr<TrackerInterface> TrackerFactory::createTracker(const TrackerConfig& config) {
     switch (config.type) {
         case TrackerType::VIT_TRACKER:
-            std::cout << "Creating VitTracker" << std::endl;
             return std::make_unique<VitTrackerAdapter>(config.vitModelPath);
             
         case TrackerType::SIAMFC_TRACKER:
-            std::cout << "Creating SiamFCPP tracker" << std::endl;
             return std::make_unique<SiamFCPPAdapter>(config.siamfcFeatureModelPath,
                                                     config.siamfcTrackingModelPath);
             

@@ -25,29 +25,18 @@ void signalHandler(int) {
     if (g_running) g_running->store(false);
 }
 
-
-
-
-
 // Simple wrapper function for the detection thread
 void threadYolo(ModelManager &modelManager, std::atomic<bool> &running, ControlUnit& controlUnit, int selectionStrategy) {
-    // Create detection manager and run the detection loop
     DetectionManager detectionManager;
     detectionManager.runDetectionLoop(modelManager, running, controlUnit, selectionStrategy);
 }
 
-
-
-
-
 // Simple wrapper function for the tracker thread
 void threadTracker(std::atomic<bool> &running, std::unique_ptr<TrackerInterface>& tracker,
                   ModelManager& modelManager, ControlUnit& controlUnit, bool showTrackingPath) {
-    // Create tracker manager and run the tracking loop
     TrackerManager trackerManager(std::move(tracker), showTrackingPath);
     trackerManager.runTrackingLoop(running, modelManager, controlUnit);
 }
-
 
 int main() {
     try {
@@ -65,20 +54,17 @@ int main() {
         g_running = &running;
         std::signal(SIGINT, signalHandler);
 
-        // Start resource monitoring with absolute path
+        // Start resource monitoring
         std::string logPath = std::filesystem::absolute(logsDir / "resource_usage.csv").string();
-        std::cout << "Starting resource monitoring, log file: " << logPath << std::endl;
-        ResourceMonitor::getInstance().startMonitoring(logPath, 30); // Log every 30 seconds
+        ResourceMonitor::getInstance().startMonitoring(logPath, 30);
 
         ControlUnit controlUnit;
         
-        // Config related code
+        // Load configuration
         auto config = config_utils::loadConfig("/home/pi5/shared_folder/aiPlatform/config/config.txt");
         
-        // Get input type configuration
+        // Read configuration values
         int inputType = config_utils::getConfigInt(config, "input.input_type");
-        
-        // Camera settings (used when input_type = 0)
         int resolutionIndex = config_utils::getConfigInt(config, "camera.resolution_index");
         int customWidth = config_utils::getConfigInt(config, "camera.width");
         int customHeight = config_utils::getConfigInt(config, "camera.height");
@@ -92,14 +78,20 @@ int main() {
         int modelType = config_utils::getConfigInt(config, "detection_model.model_type");
         bool showTrackingPath = config_utils::getConfigInt(config, "visualization.show_tracking_path") == 1;
 
-        // Read file paths from config based on model type
+        // Log system configuration
+        std::cout << "=== AI Platform Starting ===" << std::endl;
+        std::cout << "Input: " << (inputType == 0 ? "Camera" : "Video") << std::endl;
+        std::cout << "Model: " << (modelType == 0 ? "COCO Detection" : "Helmet Detection") << std::endl;
+        std::cout << "Tracker: " << (trackerType == 0 ? "VitTracker" : "SiamFCPP") << std::endl;
+        std::cout << "Detection Mode: " << (detectionMode == 0 ? "Interval" : "Continuous") << std::endl;
+        std::cout << "Path Visualization: " << (showTrackingPath ? "Enabled" : "Disabled") << std::endl;
+
+        // Read model paths
         std::string yoloModelPath, classNamesPath;
         if (modelType == 0) {
-            // COCO general detection
             yoloModelPath = config_utils::getConfigString(config, "detection_model.yolo_model_path");
             classNamesPath = config_utils::getConfigString(config, "detection_model.coco_names_path");
         } else if (modelType == 1) {
-            // Helmet detection
             yoloModelPath = config_utils::getConfigString(config, "detection_model.helmet_model_path");
             classNamesPath = config_utils::getConfigString(config, "detection_model.helmet_names_path");
         } else {
@@ -110,36 +102,34 @@ int main() {
         std::string siamfcFeatureModelPath = config_utils::getConfigString(config, "detection_model.siamfc_feature_model_path");
         std::string siamfcTrackingModelPath = config_utils::getConfigString(config, "detection_model.siamfc_tracking_model_path");
 
-        // Initialize input source based on configuration
+        // Initialize input source
         std::unique_ptr<CameraHandler> cameraHandler;
         std::unique_ptr<VideoHandler> videoHandler;
         
         if (inputType == 0) {
-            // Camera input
-            std::cout << "Using camera input" << std::endl;
             cameraHandler = std::make_unique<CameraHandler>(controlUnit);
             cameraHandler->initialize();
             cameraHandler->acquireCamera();
             cameraHandler->configureCamera(resolutionIndex, customWidth, customHeight);
             cameraHandler->setFrameRate(frameRate);
             cameraHandler->startStreaming();
+            std::cout << "Camera initialized: " << customWidth << "x" << customHeight << "@" << frameRate << "fps" << std::endl;
         } else if (inputType == 1) {
-            // Video input
-            std::cout << "Using video input" << std::endl;
             std::string videoPath = config_utils::getConfigString(config, "input.video_path");
             videoHandler = std::make_unique<VideoHandler>(controlUnit);
             videoHandler->initialize(videoPath);
             videoHandler->startStreaming();
+            std::cout << "Video source initialized: " << videoPath << std::endl;
         } else {
-            throw std::runtime_error("Invalid input type: " + std::to_string(inputType) + ". Use 0 for camera, 1 for video.");
+            throw std::runtime_error("Invalid input type: " + std::to_string(inputType));
         }
 
-        // Configure ControlUnit
+        // Configure control unit
         controlUnit.setDetectionMode(detectionMode);
         controlUnit.setDetectionInterval(detectionInterval);
         controlUnit.setTrackingInterval(trackingInterval);
 
-        // Create and initialize ModelManager
+        // Initialize detection model
         ModelManager modelManager;
         ModelConfig modelConfig;
         modelConfig.type = static_cast<ModelType>(modelType);
@@ -148,10 +138,11 @@ int main() {
         modelConfig.targetClassId = targetClassId;
         
         if (!modelManager.initialize(modelConfig)) {
-            throw std::runtime_error("Failed to initialize ModelManager");
+            throw std::runtime_error("Failed to initialize detection model");
         }
+        std::cout << "Detection model loaded successfully" << std::endl;
 
-        // Set up the appropriate tracker using factory
+        // Initialize tracker
         TrackerConfig trackerConfig;
         trackerConfig.type = static_cast<TrackerType>(trackerType);
         trackerConfig.vitModelPath = vitTrackerModelPath;
@@ -159,10 +150,10 @@ int main() {
         trackerConfig.siamfcTrackingModelPath = siamfcTrackingModelPath;
         
         std::unique_ptr<TrackerInterface> tracker = TrackerFactory::createTracker(trackerConfig);
+        std::cout << "Tracker initialized successfully" << std::endl;
 
-        // Print starting message
-        std::cout << "Streaming... Press Ctrl+C to exit." << std::endl;
-        std::cout << "Tracking path visualization: " << (showTrackingPath ? "ON" : "OFF") << std::endl;
+        // Start processing
+        std::cout << "=== System Ready - Processing Started ===" << std::endl;
 
         // Start worker threads
         std::thread yoloThread(threadYolo, std::ref(modelManager), std::ref(running),
@@ -171,24 +162,24 @@ int main() {
         std::thread trackerThread(threadTracker, std::ref(running), std::ref(tracker),
                                  std::ref(modelManager), std::ref(controlUnit), showTrackingPath);
 
-        // Join threads when done
+        // Wait for threads
         yoloThread.join();
         trackerThread.join();
 
-        // Clean up input sources
+        // Cleanup
         if (cameraHandler) {
             cameraHandler->cleanup();
         }
         if (videoHandler) {
             videoHandler->cleanup();
         }
-        std::cout << "Cleanup complete." << std::endl;
-
-        // Cleanup
+        
         ResourceMonitor::getInstance().stopMonitoring();
+        std::cout << "=== System Shutdown Complete ===" << std::endl;
         return 0;
+        
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << "FATAL ERROR: " << e.what() << std::endl;
         ResourceMonitor::getInstance().stopMonitoring();
         return 1;
     }
