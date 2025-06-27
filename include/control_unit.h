@@ -43,12 +43,12 @@ public:
     void initializeTracker(std::unique_ptr<TrackerInterface> tracker, bool showTrackingPath = true);
     void runTrackingLoop(std::atomic<bool>& running, class ModelManager& modelManager, class SafetyManager& safetyManager);
     void updateTracker(const cv::Mat& frame);
-    void visualizeTracking(const cv::Mat& frame, class SafetyManager& safetyManager);
     
     // Tracking state access
     bool isTracking() const { return isTracking_; }
     cv::Rect getLastTrackBox() const { return lastTrackBox_; }
     int getTrackedClassId() const { return trackedClassId_; }
+    const std::vector<cv::Point>& getTrackingPath() const { return trackingPath_; }
     
 private:
     // Detection mode
@@ -90,9 +90,4 @@ private:
     // Variables for path tracking visualization
     std::vector<cv::Point> trackingPath_;
     static const int MAX_PATH_POINTS = 50;
-    cv::Scalar pathColor_ = cv::Scalar(255, 100, 0);
-    
-    // Private tracking methods
-    void initializeTrackerInternal(const cv::Mat& frame, const cv::Rect& bbox, int classId,
-                                  const std::vector<std::string>& classNames);
 };

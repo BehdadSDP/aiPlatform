@@ -8,6 +8,8 @@ CONFIG -= app_bundle
 
 SOURCES += \
     src/main.cpp \
+    src/application.cpp \
+    src/visualizer.cpp \
     src/camera_handler.cpp \
     src/video_handler.cpp \
     src/config_utils.cpp \
@@ -21,7 +23,6 @@ SOURCES += \
     src/tracker_factory.cpp \
     src/detection_manager.cpp \
     src/detection_processor.cpp \
-    src/detection_visualizer.cpp \
     src/hazard_zone_manager.cpp \
     src/traffic_intensity_manager.cpp \
     src/safety_manager.cpp
@@ -59,6 +60,8 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 #    cameraHandler.h
 
 HEADERS += \
+    include/application.h \
+    include/visualizer.h \
     include/camera_handler.h \
     include/video_handler.h \
     include/config_utils.h \
@@ -74,7 +77,6 @@ HEADERS += \
     include/tracker_factory.h \
     include/detection_manager.h \
     include/detection_processor.h \
-    include/detection_visualizer.h \
     include/hazard_zone_manager.h \
     include/traffic_intensity_manager.h \
     include/safety_manager.h \

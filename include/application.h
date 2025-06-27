@@ -1,0 +1,57 @@
+#ifndef APPLICATION_H
+#define APPLICATION_H
+
+#include "include/camera_handler.h"
+#include "include/video_handler.h"
+#include "include/model_manager.h"
+#include "include/control_unit.h"
+#include "include/safety_manager.h"
+#include "include/tracker_interface.h"
+#include "include/visualizer.h"
+#include <atomic>
+#include <memory>
+#include <string>
+#include <map>
+#include <mutex>
+
+class Application {
+public:
+    Application();
+    ~Application();
+
+    bool initialize(const std::string& configPath);
+    void run();
+
+private:
+    void setupSignalHandler();
+    static void signalHandler(int signum);
+
+    bool loadConfiguration(const std::string& configPath);
+    void logConfiguration() const;
+    bool initializeInputSource();
+    bool initializeModels();
+    bool initializeTracker();
+    void initializeSafetyManager();
+
+    void detectionThread();
+    void trackingThread();
+    void cleanup();
+
+    static std::atomic<bool> m_running;
+    ControlUnit m_controlUnit;
+    ModelManager m_modelManager;
+    SafetyManager m_safetyManager;
+    Visualizer m_visualizer;
+    std::mutex m_visMutex;
+
+    std::map<std::string, std::string> m_config;
+    std::unique_ptr<CameraHandler> m_cameraHandler;
+    std::unique_ptr<VideoHandler> m_videoHandler;
+    std::unique_ptr<TrackerInterface> m_tracker;
+
+    int m_operationMode;
+    bool m_showTrackingPath;
+    int m_selectionStrategy;
+};
+
+#endif // APPLICATION_H 

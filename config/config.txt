@@ -71,7 +71,7 @@ operation_mode=1
 # Detection model configuration
 [detection_model]
 # Model type: 0=vehicle detection, 1=helmet detection, 2=face detection
-model_type=2
+model_type=0
 
 #model paths
 yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov8-vehicle.onnx

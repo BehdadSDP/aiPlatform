@@ -176,7 +176,25 @@ void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& mode
 
         if ((shouldInitialize && mode == 0) || (mode == 1 && !isTracking_)) {
             if (!detectionFrame.empty()) {
-                initializeTrackerInternal(detectionFrame, yoloBox, classId, modelManager.getClassNames());
+                try {
+                    if (tracker_ && tracker_->init(detectionFrame, yoloBox)) {
+                        isTracking_ = true;
+                        lastTrackBox_ = yoloBox;
+                        trackedClassId_ = classId;
+                        trackingPath_.clear();
+                        trackingPath_.push_back(cv::Point(yoloBox.x + yoloBox.width / 2, yoloBox.y + yoloBox.height / 2));
+                        
+                        std::string className = (classId >= 0 && classId < static_cast<int>(modelManager.getClassNames().size())) ?
+                                              modelManager.getClassNames()[classId] : "Unknown";
+                        std::cout << "Tracking initialized: " << className << " [" << yoloBox.width << "x" << yoloBox.height << "]" << std::endl;
+                    } else {
+                        std::cerr << "Tracker initialization failed" << std::endl;
+                        isTracking_ = false;
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "Tracker initialization failed: " << e.what() << std::endl;
+                    isTracking_ = false;
+                }
             }
         }
 
@@ -202,34 +220,6 @@ void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& mode
                 safetyManager.processDetections(trackingDetections, modelManager.getClassNames());
             }
         }
-
-        visualizeTracking(frame, safetyManager);
-    }
-    cv::destroyAllWindows();
-}
-
-void ControlUnit::initializeTrackerInternal(const cv::Mat& frame, const cv::Rect& bbox, int classId,
-                                           const std::vector<std::string>& classNames) {
-    try {
-        if (tracker_ && tracker_->init(frame, bbox)) {
-            isTracking_ = true;
-            lastTrackBox_ = bbox;
-            trackedClassId_ = classId;  // Store the class ID
-            
-            std::string className = (classId >= 0 && classId < static_cast<int>(classNames.size())) ?
-                                  classNames[classId] : "Unknown";
-            std::cout << "Tracking initialized: " << className << " [" << bbox.width << "x" << bbox.height << "]" << std::endl;
-
-            // Create a temporary safety manager for initialization visualization
-            SafetyManager tempSafetyManager;
-            visualizeTracking(frame, tempSafetyManager);
-        } else {
-            std::cerr << "Tracker initialization failed" << std::endl;
-            isTracking_ = false;
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Tracker initialization failed: " << e.what() << std::endl;
-        isTracking_ = false;
     }
 }
 
@@ -245,6 +235,11 @@ void ControlUnit::updateTracker(const cv::Mat& frame) {
                 trackedClassId_ = -1;  // Reset class ID
                 setTrackerFailed(true);
                 std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ")" << std::endl;
+            } else {
+                trackingPath_.push_back(cv::Point(lastTrackBox_.x + lastTrackBox_.width / 2, lastTrackBox_.y + lastTrackBox_.height / 2));
+                if (trackingPath_.size() > MAX_PATH_POINTS) {
+                    trackingPath_.erase(trackingPath_.begin());
+                }
             }
         }
     } catch (const std::exception& e) {
@@ -254,69 +249,5 @@ void ControlUnit::updateTracker(const cv::Mat& frame) {
         trackedClassId_ = -1;  // Reset class ID
         setTrackerFailed(true);
     }
-}
-
-void ControlUnit::visualizeTracking(const cv::Mat& frame, SafetyManager& safetyManager) {
-    if (frame.empty()) return;
-
-    cv::Mat displayFrame = frame.clone();
-    
-    // Draw safety overlays (hazard zones and traffic intensity)
-    safetyManager.drawSafetyOverlays(displayFrame);
-    
-    if (isTracking_ && tracker_ && tracker_->isInitialized()) {
-        cv::Point currentCenter(lastTrackBox_.x + lastTrackBox_.width / 2, 
-                               lastTrackBox_.y + lastTrackBox_.height / 2);
-        
-        if (showTrackingPath_) {
-            trackingPath_.push_back(currentCenter);
-            
-            if (trackingPath_.size() > MAX_PATH_POINTS) {
-                trackingPath_.erase(trackingPath_.begin());
-            }
-            
-            if (trackingPath_.size() > 1) {
-                for (size_t i = 1; i < trackingPath_.size(); ++i) {
-                    float alpha = static_cast<float>(i) / trackingPath_.size();
-                    int thickness = static_cast<int>(1 + alpha * 3);
-                    cv::Scalar fadeColor = pathColor_ * alpha;
-                    cv::line(displayFrame, trackingPath_[i-1], trackingPath_[i], fadeColor, thickness);
-                }
-                
-                for (size_t i = 0; i < trackingPath_.size(); ++i) {
-                    float alpha = static_cast<float>(i) / trackingPath_.size();
-                    int radius = static_cast<int>(2 + alpha * 3);
-                    cv::Scalar pointColor = pathColor_ * alpha;
-                    cv::circle(displayFrame, trackingPath_[i], radius, pointColor, -1);
-                }
-            }
-            
-            cv::circle(displayFrame, currentCenter, 6, cv::Scalar(0, 255, 255), 2);
-            cv::circle(displayFrame, currentCenter, 3, cv::Scalar(255, 255, 255), -1);
-        }
-        
-        cv::rectangle(displayFrame, lastTrackBox_, cv::Scalar(0, 0, 255), 3);
-
-        std::string label;
-        if (showTrackingPath_) {
-            label = "Tracking (Path: " + std::to_string(trackingPath_.size()) + " points)";
-        } else {
-            label = "Tracking (Path: OFF)";
-        }
-        
-        int baseline = 0;
-        cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.6, 2, &baseline);
-        cv::rectangle(displayFrame,
-                     cv::Point(lastTrackBox_.x, lastTrackBox_.y - textSize.height - 10),
-                     cv::Point(lastTrackBox_.x + textSize.width, lastTrackBox_.y),
-                     cv::Scalar(0, 0, 255), -1);
-
-        cv::putText(displayFrame, label,
-                   cv::Point(lastTrackBox_.x, lastTrackBox_.y - 5),
-                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
-    }
-
-    cv::imshow("Tracking", displayFrame);
-    cv::waitKey(1);
 }
 

@@ -1,9 +1,9 @@
 #include "include/detection_manager.h"
 #include "include/frame_buffer_manager.h"
 
-DetectionManager::DetectionManager() 
+DetectionManager::DetectionManager(Visualizer& visualizer) 
     : processor_(std::make_unique<DetectionProcessor>()),
-      visualizer_(std::make_unique<DetectionVisualizer>()) {}
+      visualizer_(visualizer) {}
 
 void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<bool>& running, 
                                        ControlUnit& controlUnit, int selectionStrategy, SafetyManager& safetyManager) {
@@ -38,20 +38,13 @@ void DetectionManager::processFrame(ModelManager& modelManager, ControlUnit& con
 
     // Visualize detections (draws on frame but doesn't display)
     // Use the new method that considers traffic intensity polygons
-    visualizer_->visualizeDetections(frame, detections, classNames, safetyManager.getTrafficIntensityManager());
+    visualizer_.visualizeDetections(frame, detections, classNames, safetyManager.getTrafficIntensityManager());
     
     // Draw safety overlays (hazard zones and traffic intensity)
     safetyManager.drawSafetyOverlays(frame);
 
     // Now display the complete frame with all overlays
-    static bool windowCreated = false;
-    if (!windowCreated) {
-        cv::namedWindow("Detection View", cv::WINDOW_NORMAL);
-        cv::resizeWindow("Detection View", 800, 600);
-        windowCreated = true;
-    }
-    cv::imshow("Detection View", frame);
-    cv::waitKey(1);
+    visualizer_.displayFrame(frame);
 
     // Process detections for tracking
     processor_->processDetections(detections, frame, frameData.sequence, controlUnit, selectionStrategy);
