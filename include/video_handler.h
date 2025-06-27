@@ -19,7 +19,7 @@ public:
 class VideoHandler {
 public:
     explicit VideoHandler(ControlUnit& controlUnit)
-        : controlUnit_(controlUnit), isStreaming_(false), frameCount_(0), fps_(0.0) {}
+        : controlUnit_(controlUnit), isStreaming_(false), fps_(0.0), frameCount_(0) {}
 
     ~VideoHandler() { cleanup(); }
 

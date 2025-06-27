@@ -8,7 +8,8 @@
 
 enum class ModelType {
     COCO_GENERAL = 0,
-    HELMET_DETECTION = 1
+    HELMET_DETECTION = 1,
+    FACE_DETECTION = 2
 };
 
 struct ModelConfig {

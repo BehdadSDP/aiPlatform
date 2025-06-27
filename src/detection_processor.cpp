@@ -5,6 +5,12 @@ DetectionProcessor::DetectionProcessor() {}
 void DetectionProcessor::processDetections(const std::vector<model::Detection>& detections, 
                                           const cv::Mat& frame, uint64_t frameSeq, 
                                           ControlUnit& controlUnit, int selectionStrategy) {
+    // In detection-only mode, we don't need to pass data to tracking
+    if (controlUnit.isDetectionOnly()) {
+        // Just return - detections are already visualized by DetectionVisualizer
+        return;
+    }
+
     if (detections.empty()) {
         controlUnit.clearDetection();
         return;

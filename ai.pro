@@ -7,27 +7,27 @@ CONFIG -= app_bundle
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    src/main.cpp \
     src/camera_handler.cpp \
     src/video_handler.cpp \
     src/config_utils.cpp \
     src/control_unit.cpp \
     src/frame_buffer_manager.cpp \
-    src/main.cpp \
     src/model.cpp \
     src/model_manager.cpp \
     src/resource_monitor.cpp \
     src/siamfc_pp_tracker.cpp \
     src/vittracker.cpp \
     src/tracker_factory.cpp \
-    src/tracker_manager.cpp \
-    src/vit_tracker_adapter.cpp \
-    src/siamfc_tracker_adapter.cpp \
     src/detection_manager.cpp \
     src/detection_processor.cpp \
     src/detection_visualizer.cpp \
+    src/hazard_zone_manager.cpp \
+    src/traffic_intensity_manager.cpp \
+    src/safety_manager.cpp
 
 # Add libcamera and dependencies
-LIBS += -L/usr/lib -lcamera -lcamera-base -lpisp -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_videoio -lopencv_imgcodecs -lopencv_dnn -lcamera
+LIBS += -L/usr/lib -lcamera-base -lpisp -lcamera
 
 # OpenCV libraries (try different combinations)
 LIBS += -L/usr/local/lib \
@@ -72,12 +72,12 @@ HEADERS += \
     include/vittracker.h \
     include/tracker_interface.h \
     include/tracker_factory.h \
-    include/tracker_manager.h \
-    include/vit_tracker_adapter.h \
-    include/siamfc_tracker_adapter.h \
     include/detection_manager.h \
     include/detection_processor.h \
     include/detection_visualizer.h \
+    include/hazard_zone_manager.h \
+    include/traffic_intensity_manager.h \
+    include/safety_manager.h \
     include/Output/mavlink_types.h \
     include/Output/minimal/mavlink_msg_heartbeat.h \
     include/Output/protocol.h

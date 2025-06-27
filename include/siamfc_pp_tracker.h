@@ -7,17 +7,22 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include "tracker_interface.h"
 
-class SiamFCPPTracker2 {
+class SiamFCPPTracker2 : public TrackerInterface {
 public:
     // Constructor/Destructor
     SiamFCPPTracker2();
     ~SiamFCPPTracker2();
 
-    // Main interface
+    // TrackerInterface implementation
+    bool init(const cv::Mat& frame, const cv::Rect& initBox) override;
+    cv::Rect update(const cv::Mat& frame) override;
+    bool isInitialized() const override { return is_initialized_; }
+    float getLastConfidence() const override { return lastConfidence_; }
+
+    // Model loading (called before init)
     bool loadModel(const std::string& feature_model_path, const std::string& track_model_path);
-    bool init(const cv::Mat& frame, const cv::Rect& bbox);
-    cv::Rect update(const cv::Mat& frame, float& confidence);
     
     // Crop function - made public to allow external access if needed
     std::pair<cv::Mat, float> getCrop(const cv::Mat& img,
@@ -48,6 +53,7 @@ private:
     float scale_z_;           // Scale used for the template patch
     int im_w_;                // Image width
     int im_h_;                // Image height
+    float lastConfidence_;    // Last confidence score
 
     // Cosine window for penalizing
     std::vector<float> window_;

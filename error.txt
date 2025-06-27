@@ -1,21 +1,5 @@
-Starting resource monitoring, log file: /home/pi5/build-ai-Desktop-Debug/logs/resource_usage.csv
-Opening log file: /home/pi5/build-ai-Desktop-Debug/logs/resource_usage.csv
-Log file opened successfully
-Monitor loop started
-Resource monitoring started with interval: 30 seconds
-Config input.input_type = 0
-Config camera.resolution_index = 4
-Config camera.width = 640
-Config camera.height = 640
-Config camera.frame_rate = 20
-Config detection.interval = 8000
-Config tracking.interval = 1
-Config detection.mode = 1
-Config general.target_class_id = 0
-Config tracking.tracker_type = 1
-Config detection.selection_strategy = 0
-Config detection_model.model_type = 0
-Error: Config key missing: show_tracking_path
+=== AI Platform Starting ===
+FATAL ERROR: Cannot open config file: config/config.txt
 Stopping resource monitoring...
-Waiting for monitor thread to finish...
+Resource monitoring stopped
 Press <RETURN> to close this window...

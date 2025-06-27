@@ -32,7 +32,7 @@ public:
         : cm_(std::make_unique<CameraManager>()), camera_(nullptr), stream_(nullptr),
           controlUnit_(controlUnit), // Store reference
           lastFrameTime_(std::chrono::steady_clock::now()), frameCount_(0), fps_(0.0),
-          frameDuration_(0) {}
+          frameDuration_(0), mappedBuffers_(8) {} // Pre-allocate for performance
 
     ~CameraHandler() { cleanup(); }
 
@@ -90,6 +90,18 @@ private:
     unsigned int frameCount_;
     double fps_;
     int64_t frameDuration_;
+    
+    // Performance optimizations
+    struct MappedBuffer {
+        void* ptr = nullptr;
+        size_t length = 0;
+        int fd = -1;
+        bool active = false;
+    };
+    std::vector<MappedBuffer> mappedBuffers_;
+    void* mapBuffer(int fd, size_t length, int bufferIndex);
+    void unmapBuffer(int bufferIndex);
+    void cleanupMappedBuffers();
 };
 
 #endif // CAMERA_HANDLER_H

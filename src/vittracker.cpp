@@ -18,16 +18,18 @@ VitTracker::VitTracker(const std::string& onnxPath)
     }
 }
 
-void VitTracker::init(const cv::Mat& frame, const cv::Rect& initBox)
+bool VitTracker::init(const cv::Mat& frame, const cv::Rect& initBox)
 {
     if (frame.empty() || initBox.width <= 0 || initBox.height <= 0) {
-        throw std::runtime_error("Invalid frame or initial bounding box in VitTracker::init");
+        std::cerr << "Invalid frame or initial bounding box in VitTracker::init" << std::endl;
+        return false;
     }
 
     // Ensure the bounding box is within frame bounds
     trackedBox_ = initBox & cv::Rect(0, 0, frame.cols, frame.rows);
     if (trackedBox_.width <= 0 || trackedBox_.height <= 0) {
-        throw std::runtime_error("Initial bounding box is outside frame bounds");
+        std::cerr << "Initial bounding box is outside frame bounds" << std::endl;
+        return false;
     }
 
     // Make sure to use a deep copy of the frame
@@ -37,15 +39,15 @@ void VitTracker::init(const cv::Mat& frame, const cv::Rect& initBox)
     try {
         tracker_->init(frameCopy, trackedBox_);
         std::cout << "VitTracker initialized with box: " << trackedBox_ << std::endl;
+        initialized_ = true;
+        trackScore_ = 1.0f; // Reset confidence
+        return true;
     } catch (const cv::Exception& e) {
         std::cerr << "TrackerVit::init failed: " << e.what() << std::endl;
         initialized_ = false;
         trackScore_ = 0.0f;
-        throw std::runtime_error("TrackerVit::init failed: " + std::string(e.what()));
+        return false;
     }
-
-    initialized_ = true;
-    trackScore_ = 1.0f; // Reset confidence
 }
 
 cv::Rect VitTracker::update(const cv::Mat& frame)

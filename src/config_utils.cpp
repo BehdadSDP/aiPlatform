@@ -64,6 +64,7 @@ std::map<std::string, std::string> loadConfig(const std::string& filename) {
         "tracking.mode",
         "tracking.interval",
         "general.target_class_id",
+        "general.operation_mode",
         "detection_model.model_type"
     };
     for (const auto& key : required_keys) {

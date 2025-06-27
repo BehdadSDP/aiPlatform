@@ -1,6 +1,7 @@
 #include "include/camera_handler.h"
 #include <iomanip>
 #include <sys/mman.h>
+#include <iostream>
 
 void CameraHandler::initialize() {
     if (cm_->start() < 0) {
@@ -15,10 +16,21 @@ void CameraHandler::acquireCamera(const std::string& cameraId) {
         throw CameraException("No cameras found");
     }
     std::string id = cameraId.empty() ? cameras[0]->id() : cameraId;
-    camera_ = cm_->get(id);
-    if (!camera_) {
+    
+    // Find camera by ID instead of using get() method
+    std::shared_ptr<Camera> selectedCamera = nullptr;
+    for (const auto& camera : cameras) {
+        if (camera->id() == id) {
+            selectedCamera = camera;
+            break;
+        }
+    }
+    
+    if (!selectedCamera) {
         throw CameraException("Failed to get camera with ID: " + id);
     }
+    
+    camera_ = selectedCamera;
     if (camera_->acquire() < 0) {
         throw CameraException("Failed to acquire camera");
     }
@@ -163,6 +175,7 @@ void CameraHandler::setFrameRate(int targetFps) {
 
 void CameraHandler::cleanup() {
     stopStreaming();
+    cleanupMappedBuffers();
     if (camera_) {
         camera_->release();
         camera_.reset();
@@ -223,17 +236,17 @@ void CameraHandler::stopStreaming() {
 }
 
 void CameraHandler::requestComplete(Request* request) {
+    static int totalFrames = 0;
+    totalFrames++;
+    
+    // Debug: Print every 100 frames to ensure this function is being called
+    if (totalFrames % 100 == 0) {
+        std::cout << "DEBUG: Processed " << totalFrames << " frames total" << std::endl;
+    }
+    
     if (request->status() != Request::RequestComplete) {
         std::cerr << "Request failed" << std::endl;
         return;
-    }
-
-    auto currentTime = std::chrono::steady_clock::now();
-    double timeDiff = std::chrono::duration_cast<std::chrono::microseconds>(
-                currentTime - lastFrameTime_).count() / 1e6;
-    lastFrameTime_ = currentTime;
-    if (timeDiff > 0) {
-        fps_ = 1.0 / timeDiff;
     }
 
     const auto& buffers = request->buffers();
@@ -242,9 +255,26 @@ void CameraHandler::requestComplete(Request* request) {
         const StreamConfiguration& config = stream->configuration();
 
         const auto& planes = buffer->planes();
+        if (planes.empty()) continue;
+        
+        // Find buffer index by matching the FrameBuffer pointer
+        int bufferIndex = -1;
+        if (allocator_) {
+            // Cast away const - safe since we're only reading from allocator
+            Stream* nonConstStream = const_cast<Stream*>(stream);
+            const auto& allocatedBuffers = allocator_->buffers(nonConstStream);
+            for (size_t i = 0; i < allocatedBuffers.size() && i < mappedBuffers_.size(); ++i) {
+                if (allocatedBuffers[i].get() == buffer) {
+                    bufferIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+        
+        // Use optimized buffer mapping with proper index
         int fd = planes[0].fd.get();
         size_t length = planes[0].length;
-        void* mappedData = mmap(nullptr, length, PROT_READ, MAP_SHARED, fd, 0);
+        void* mappedData = mapBuffer(fd, length, bufferIndex);
         if (mappedData == MAP_FAILED) {
             std::cerr << "Failed to map buffer" << std::endl;
             continue;
@@ -253,12 +283,21 @@ void CameraHandler::requestComplete(Request* request) {
         uint8_t* data = static_cast<uint8_t*>(mappedData);
         cv::Mat rawFrame(config.size.height, config.size.width, CV_8UC3, data, config.stride);
 
-        // Create FrameData object
+        // Create FrameData object - MUST clone for memory safety
         FrameData frameData;
-        frameData.image = rawFrame.clone();
+        frameData.image = rawFrame.clone();  // Essential: buffer will be reused
         frameData.timestamp = metadata.timestamp;
         frameData.sequence = metadata.sequence;
-        frameData.format = config.pixelFormat.toString();
+        
+        // Cache format string to avoid repeated conversions
+        static std::string cachedFormat;
+        static PixelFormat lastFormat;
+        if (config.pixelFormat != lastFormat) {
+            cachedFormat = config.pixelFormat.toString();
+            lastFormat = config.pixelFormat;
+        }
+        frameData.format = cachedFormat;
+        
         frameData.size = cv::Size(config.size.width, config.size.height);
         frameData.fps = fps_;
 
@@ -268,9 +307,58 @@ void CameraHandler::requestComplete(Request* request) {
         // Increment camera counter
         controlUnit_.notifyNewFrame();
 
-        munmap(mappedData, length);
+        // Keep mapping for reuse (don't unmap)
+        unmapBuffer(bufferIndex);
     }
 
     request->reuse(Request::ReuseBuffers);
     camera_->queueRequest(request);
+}
+
+void* CameraHandler::mapBuffer(int fd, size_t length, int bufferIndex) {
+    if (bufferIndex >= 0 && bufferIndex < static_cast<int>(mappedBuffers_.size())) {
+        auto& buffer = mappedBuffers_[bufferIndex];
+        
+        // Reuse existing mapping if same fd and length
+        if (buffer.active && buffer.fd == fd && buffer.length == length) {
+            return buffer.ptr;
+        }
+        
+        // Unmap old buffer if exists
+        if (buffer.active) {
+            munmap(buffer.ptr, buffer.length);
+        }
+        
+        // Create new mapping
+        buffer.ptr = mmap(nullptr, length, PROT_READ, MAP_SHARED, fd, 0);
+        if (buffer.ptr != MAP_FAILED) {
+            buffer.fd = fd;
+            buffer.length = length;
+            buffer.active = true;
+            return buffer.ptr;
+        }
+    }
+    
+    // Fallback to regular mmap
+    return mmap(nullptr, length, PROT_READ, MAP_SHARED, fd, 0);
+}
+
+void CameraHandler::unmapBuffer(int bufferIndex) {
+    if (bufferIndex >= 0 && bufferIndex < static_cast<int>(mappedBuffers_.size())) {
+        auto& buffer = mappedBuffers_[bufferIndex];
+        if (buffer.active) {
+            // Keep mapping for reuse - don't unmap
+            // buffer.active = false;
+        }
+    }
+}
+
+void CameraHandler::cleanupMappedBuffers() {
+    for (auto& buffer : mappedBuffers_) {
+        if (buffer.active) {
+            munmap(buffer.ptr, buffer.length);
+            buffer.active = false;
+            buffer.ptr = nullptr;
+        }
+    }
 }

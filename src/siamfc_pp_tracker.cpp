@@ -131,6 +131,7 @@ bool SiamFCPPTracker2::init(const cv::Mat& frame, const cv::Rect& bbox) {
 
         initCosineWindow();
         is_initialized_ = true;
+        lastConfidence_ = 1.0f; // Reset confidence
         return true;
     } catch (const std::exception& e) {
         return false;
@@ -229,9 +230,9 @@ SiamFCPPTracker2::ScoreProcessResult SiamFCPPTracker2::postProcessScore(const st
     return result;
 }
 
-cv::Rect SiamFCPPTracker2::update(const cv::Mat& frame, float& confidence) {
+cv::Rect SiamFCPPTracker2::update(const cv::Mat& frame) {
     if (!is_initialized_) {
-        confidence = 0.0f;
+        lastConfidence_ = 0.0f;
         return cv::Rect();
     }
     try {
@@ -296,11 +297,11 @@ cv::Rect SiamFCPPTracker2::update(const cv::Mat& frame, float& confidence) {
         
         target_pos_ = restricted_pos;
         target_sz_ = restricted_sz;
-        confidence = score_vec[result.best_pscore_id];
+        lastConfidence_ = score_vec[result.best_pscore_id];
         
         const float CONFIDENCE_THRESHOLD = 0.15f;
-        if (confidence < CONFIDENCE_THRESHOLD) {
-            confidence = 0.0f;
+        if (lastConfidence_ < CONFIDENCE_THRESHOLD) {
+            lastConfidence_ = 0.0f;
         }
 
         cv::Rect2f rect_f = cxywhToXywh(cv::Rect2f(target_pos_.x, target_pos_.y, target_sz_.width, target_sz_.height));
@@ -313,7 +314,7 @@ cv::Rect SiamFCPPTracker2::update(const cv::Mat& frame, float& confidence) {
         return rect_result;
     }
     catch (const std::exception& e) {
-        confidence = 0.0f;
+        lastConfidence_ = 0.0f;
         return cv::Rect(0, 0, 0, 0);
     }
 }
