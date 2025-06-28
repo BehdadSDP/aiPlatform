@@ -65,6 +65,7 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "any": "cpp",
-        "cstring": "cpp"
+        "cstring": "cpp",
+        "filesystem": "cpp"
     }
 }

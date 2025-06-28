@@ -10,6 +10,7 @@ SOURCES += \
     src/main.cpp \
     src/application.cpp \
     src/visualizer.cpp \
+    src/failure_handler.cpp \
     src/camera_handler.cpp \
     src/video_handler.cpp \
     src/config_utils.cpp \
@@ -62,6 +63,7 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 HEADERS += \
     include/application.h \
     include/visualizer.h \
+    include/failure_handler.h \
     include/camera_handler.h \
     include/video_handler.h \
     include/config_utils.h \
@@ -70,7 +72,6 @@ HEADERS += \
     include/model.h \
     include/model_manager.h \
     include/resource_monitor.h \
-    include/selection_strategy.h \
     include/siamfc_pp_tracker.h \
     include/vittracker.h \
     include/tracker_interface.h \

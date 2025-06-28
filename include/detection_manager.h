@@ -17,6 +17,7 @@ public:
 
 private:
     void processFrame(ModelManager& modelManager, ControlUnit& controlUnit, int selectionStrategy, SafetyManager& safetyManager);
+    void handleTrackerFailure(ControlUnit& controlUnit);
     
     std::unique_ptr<DetectionProcessor> processor_;
     Visualizer& visualizer_;

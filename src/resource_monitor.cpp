@@ -66,7 +66,23 @@ void ResourceMonitor::monitorLoop(int intervalSeconds) {
             
             auto now = std::chrono::system_clock::now();
             auto time = std::chrono::system_clock::to_time_t(now);
-            std::tm* tm = std::localtime(&time);
+            
+            // Use thread-safe time functions
+            std::tm tm_buf;
+            std::tm* tm = nullptr;
+            
+            #ifdef _WIN32
+                localtime_s(&tm_buf, &time);
+                tm = &tm_buf;
+            #else
+                // Use localtime_r for thread safety on Unix systems
+                tm = localtime_r(&time, &tm_buf);
+            #endif
+            
+            if (!tm) {
+                std::cerr << "Failed to get local time" << std::endl;
+                continue;
+            }
             
             std::stringstream timestamp;
             timestamp << std::put_time(tm, "%Y-%m-%d %H:%M:%S");
@@ -107,8 +123,6 @@ void ResourceMonitor::monitorLoop(int intervalSeconds) {
 }
 
 float ResourceMonitor::getCpuUsage() {
-    static unsigned long long lastTotalUser = 0, lastTotalUserLow = 0, lastTotalSys = 0, lastTotalIdle = 0;
-    
     std::ifstream statFile("/proc/stat");
     if (!statFile.is_open()) {
         std::cerr << "Failed to open /proc/stat" << std::endl;
@@ -117,31 +131,35 @@ float ResourceMonitor::getCpuUsage() {
     
     std::string line;
     std::getline(statFile, line);
-    
-    unsigned long long totalUser, totalUserLow, totalSys, totalIdle;
+    statFile.close();
+
     std::istringstream iss(line);
     std::string cpu;
-    iss >> cpu >> totalUser >> totalUserLow >> totalSys >> totalIdle;
-    
-    if (lastTotalUser == 0) {
-        lastTotalUser = totalUser;
-        lastTotalUserLow = totalUserLow;
-        lastTotalSys = totalSys;
-        lastTotalIdle = totalIdle;
+    unsigned long long user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice;
+    iss >> cpu >> user >> nice >> system >> idle >> iowait >> irq >> softirq >> steal >> guest >> guest_nice;
+
+    unsigned long long currentIdleTime = idle + iowait;
+    unsigned long long currentTotalTime = user + nice + system + currentIdleTime + irq + softirq + steal;
+
+    if (prevTotalTime_ == 0) {
+        // First run, just store values and return 0
+        prevTotalTime_ = currentTotalTime;
+        prevIdleTime_ = currentIdleTime;
         return 0.0f;
     }
+
+    unsigned long long totalTimeDiff = currentTotalTime - prevTotalTime_;
+    unsigned long long idleTimeDiff = currentIdleTime - prevIdleTime_;
     
-    unsigned long long total = (totalUser - lastTotalUser) +
-                             (totalUserLow - lastTotalUserLow) +
-                             (totalSys - lastTotalSys);
-    unsigned long long idle = totalIdle - lastTotalIdle;
-    
-    lastTotalUser = totalUser;
-    lastTotalUserLow = totalUserLow;
-    lastTotalSys = totalSys;
-    lastTotalIdle = totalIdle;
-    
-    return total > 0 ? (float)(total - idle) / total * 100.0f : 0.0f;
+    prevTotalTime_ = currentTotalTime;
+    prevIdleTime_ = currentIdleTime;
+
+    if (totalTimeDiff == 0) {
+        return 0.0f;
+    }
+
+    float cpu_usage = 100.0 * (1.0 - (double)idleTimeDiff / totalTimeDiff);
+    return cpu_usage;
 }
 
 float ResourceMonitor::getMemoryUsage() {

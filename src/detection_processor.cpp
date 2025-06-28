@@ -16,17 +16,19 @@ void DetectionProcessor::processDetections(const std::vector<model::Detection>& 
         return;
     }
 
-    // Create strategy using factory
-    auto strategy = SelectionStrategyFactory::createStrategy(selectionStrategy);
+    detectionFailure_.setSelectionStrategy(selectionStrategy);
     
     cv::Rect selectedBox;
     float selectedConf;
     int selectedClassId;
     
-    // Use strategy to select detection
-    if (strategy->selectDetection(detections, selectedBox, selectedConf, selectedClassId)) {
+    if (detectionFailure_.selectTarget(detections, selectedBox, selectedConf, selectedClassId)) {
         controlUnit.setDetection(selectedBox, frame, frameSeq, selectedClassId);
     } else {
         controlUnit.clearDetection();
     }
+}
+
+void DetectionProcessor::updateSimilarityReference(const cv::Mat& frame, const cv::Rect& box) {
+    detectionFailure_.updateSimilarityReference(frame, box);
 } 

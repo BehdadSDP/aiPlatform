@@ -33,6 +33,10 @@ private:
     std::thread monitorThread_;
     std::ofstream logFile_;
     std::mutex mutex_;
+
+    // For CPU Usage Calculation
+    unsigned long long prevTotalTime_ = 0;
+    unsigned long long prevIdleTime_ = 0;
 };
 
 #endif // RESOURCE_MONITOR_H 

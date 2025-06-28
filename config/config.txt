@@ -1,7 +1,7 @@
 # Input settings
 [input]
 # Input type: 0 for camera, 1 for video file
-input_type=0
+input_type=1
 # Video file path (used when input_type=1)
 video_path=/home/pi5/shared_folder/aiPlatform/test/test_road.mp4
 
@@ -16,8 +16,19 @@ frame_rate=20
 [detection]
 mode=1 #mode 0 interval
 interval=8000  # Optimized for detection-only mode
-# Selection strategy: 0=highest confidence, 1=upper box, 2=lower box, 3=rightmost, 4=leftmost
+# Selection strategy: 0=highest confidence, 1=upper box, 2=lower box, 3=rightmost, 4=leftmost, 5=similarity
 selection_strategy=0
+
+# Enhanced Similarity Configuration (for tracking scenarios)
+[similarity]
+# Weights for similarity components (should sum to 1.0)
+spatial_weight=0.4      # Weight for spatial position similarity
+appearance_weight=0.4   # Weight for appearance similarity  
+size_weight=0.2         # Weight for size similarity
+# Maximum expected movement in pixels (for spatial similarity calculation)
+max_expected_movement=100.0
+# Similarity threshold (0.0 to 1.0)
+similarity_threshold=0.7
 
 # Tracking settings
 [tracking]
@@ -32,6 +43,13 @@ tracker_type= 0
 show_tracking_path=1
 # Maximum path points to store (default: 50)
 max_path_points=50
+
+# Frame Buffer Management
+[frame_buffer]
+# Automatic cleanup interval (number of frames before cleanup)
+cleanup_interval=100
+# Buffer size (reduced from 500 to prevent memory issues)
+buffer_size=50
 
 # Hazard Zone Configuration
 [hazard_zones]
@@ -66,7 +84,7 @@ zone3_active=0
 [general]
 target_class_id=0
 # Operation mode: 0=detection+tracking, 1=detection only
-operation_mode=1
+operation_mode=0
 
 # Detection model configuration
 [detection_model]
@@ -93,7 +111,7 @@ siamfc_tracking_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_t
 # Traffic Intensity Configuration
 [traffic_intensity]
 # Enable/disable traffic intensity monitoring
-enabled=0
+enabled=1
 # Visualization settings
 show_polygons=1
 show_stats=1

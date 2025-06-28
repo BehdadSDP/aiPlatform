@@ -8,6 +8,7 @@
 #include "include/safety_manager.h"
 #include "include/tracker_interface.h"
 #include "include/visualizer.h"
+#include "include/failure_handler.h"
 #include <atomic>
 #include <memory>
 #include <string>
@@ -32,6 +33,7 @@ private:
     bool initializeModels();
     bool initializeTracker();
     void initializeSafetyManager();
+    void initializeFrameBuffer();
 
     void detectionThread();
     void trackingThread();
@@ -42,6 +44,7 @@ private:
     ModelManager m_modelManager;
     SafetyManager m_safetyManager;
     Visualizer m_visualizer;
+    DetectionFailure m_detectionFailure;
     std::mutex m_visMutex;
 
     std::map<std::string, std::string> m_config;

@@ -112,6 +112,22 @@ void ControlUnit::setTrackerFailed(bool failed) {
     }
 }
 
+void ControlUnit::setTrackerFailed(bool failed, const cv::Mat& frame, const cv::Rect& box) {
+    std::lock_guard<std::mutex> lock(detectionMutex_);
+    trackerFailed_ = failed;
+    if (failed) {
+        lastFailedFrame_ = frame.clone();
+        lastFailedBox_ = box;
+        detectionCV_.notify_one();
+    }
+}
+
+void ControlUnit::getFailureData(cv::Mat& frame, cv::Rect& box) const {
+    std::lock_guard<std::mutex> lock(detectionMutex_);
+    frame = lastFailedFrame_.clone();
+    box = lastFailedBox_;
+}
+
 void ControlUnit::setDetection(const cv::Rect& box, const cv::Mat& frame, uint64_t frameSeq, int classId) {
     std::lock_guard<std::mutex> lock(detectionMutex_);
     detection_.box = box;
@@ -156,46 +172,35 @@ void ControlUnit::initializeTracker(std::unique_ptr<TrackerInterface> tracker, b
     trackingPath_.clear();
 }
 
-void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& modelManager, SafetyManager& safetyManager) {
-    int mode = getDetectionMode();
+bool ControlUnit::startTracking(const cv::Mat& frame, const cv::Rect& box, int classId, const std::vector<std::string>& classNames) {
+    try {
+        if (tracker_ && tracker_->init(frame, box)) {
+            isTracking_ = true;
+            lastTrackBox_ = box;
+            trackedClassId_ = classId;
+            trackingPath_.clear();
+            trackingPath_.push_back(cv::Point(box.x + box.width / 2, box.y + box.height / 2));
+            
+            std::string className = (classId >= 0 && classId < static_cast<int>(classNames.size())) ?
+                                  classNames[classId] : "Unknown";
+            std::cout << "Tracking initialized: " << className << " [" << box.width << "x" << box.height << "]" << std::endl;
+            return true;
+        } else {
+            std::cerr << "Tracker initialization failed" << std::endl;
+            isTracking_ = false;
+            return false;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Tracker initialization failed: " << e.what() << std::endl;
+        isTracking_ = false;
+        return false;
+    }
+}
 
+void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& modelManager, SafetyManager& safetyManager) {
     while (running) {
         if (!waitForTrackingTurn()) {
             continue;
-        }
-
-        bool shouldInitialize = hasNewDetection();
-        cv::Rect yoloBox;
-        cv::Mat detectionFrame;
-        int classId = -1;
-
-        if (shouldInitialize) {
-            getDetectionData(yoloBox, detectionFrame, classId);
-            markDetectionAsProcessed();
-        }
-
-        if ((shouldInitialize && mode == 0) || (mode == 1 && !isTracking_)) {
-            if (!detectionFrame.empty()) {
-                try {
-                    if (tracker_ && tracker_->init(detectionFrame, yoloBox)) {
-                        isTracking_ = true;
-                        lastTrackBox_ = yoloBox;
-                        trackedClassId_ = classId;
-                        trackingPath_.clear();
-                        trackingPath_.push_back(cv::Point(yoloBox.x + yoloBox.width / 2, yoloBox.y + yoloBox.height / 2));
-                        
-                        std::string className = (classId >= 0 && classId < static_cast<int>(modelManager.getClassNames().size())) ?
-                                              modelManager.getClassNames()[classId] : "Unknown";
-                        std::cout << "Tracking initialized: " << className << " [" << yoloBox.width << "x" << yoloBox.height << "]" << std::endl;
-                    } else {
-                        std::cerr << "Tracker initialization failed" << std::endl;
-                        isTracking_ = false;
-                    }
-                } catch (const std::exception& e) {
-                    std::cerr << "Tracker initialization failed: " << e.what() << std::endl;
-                    isTracking_ = false;
-                }
-            }
         }
 
         FrameData frameData;
@@ -226,16 +231,24 @@ void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& mode
 void ControlUnit::updateTracker(const cv::Mat& frame) {
     try {
         if (tracker_) {
-            lastTrackBox_ = tracker_->update(frame);
+            cv::Rect newTrackBox = tracker_->update(frame);
             
-            bool trackerValid = lastTrackBox_.width > 0 && lastTrackBox_.height > 0 && tracker_->isInitialized();
+            bool trackerValid = newTrackBox.width > 0 && newTrackBox.height > 0 && tracker_->isInitialized();
             if (!trackerValid) {
                 isTracking_ = false;
                 trackingPath_.clear();
                 trackedClassId_ = -1;  // Reset class ID
-                setTrackerFailed(true);
-                std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ")" << std::endl;
+                
+                // Only set failure reference if we have a valid previous box
+                if (lastTrackBox_.width > 0 && lastTrackBox_.height > 0) {
+                    setTrackerFailed(true, frame, lastTrackBox_);
+                    std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ") - Using last valid box for reference" << std::endl;
+                } else {
+                    setTrackerFailed(true);
+                    std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ") - No valid reference available" << std::endl;
+                }
             } else {
+                lastTrackBox_ = newTrackBox;  // Update the last valid box
                 trackingPath_.push_back(cv::Point(lastTrackBox_.x + lastTrackBox_.width / 2, lastTrackBox_.y + lastTrackBox_.height / 2));
                 if (trackingPath_.size() > MAX_PATH_POINTS) {
                     trackingPath_.erase(trackingPath_.begin());

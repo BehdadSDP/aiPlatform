@@ -13,7 +13,26 @@ void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<
             continue;
         }
 
+        // Check for tracker failures and update reference
+        handleTrackerFailure(controlUnit);
+
         processFrame(modelManager, controlUnit, selectionStrategy, safetyManager);
+    }
+}
+
+void DetectionManager::handleTrackerFailure(ControlUnit& controlUnit) {
+    if (controlUnit.hasTrackerFailed()) {
+        cv::Mat lastFrame;
+        cv::Rect lastBox;
+        controlUnit.getFailureData(lastFrame, lastBox);
+        
+        // Update the detection processor with the failure reference
+        processor_->updateSimilarityReference(lastFrame, lastBox);
+        
+        std::cout << "Tracker failure detected. Updated similarity reference." << std::endl;
+        
+        // Clear the tracker failure flag after processing
+        controlUnit.setTrackerFailed(false);
     }
 }
 

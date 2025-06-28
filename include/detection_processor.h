@@ -2,7 +2,7 @@
 
 #include "include/model.h"
 #include "include/control_unit.h"
-#include "include/selection_strategy.h"
+#include "include/failure_handler.h"
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <memory>
@@ -14,7 +14,10 @@ public:
     void processDetections(const std::vector<model::Detection>& detections, 
                           const cv::Mat& frame, uint64_t frameSeq, 
                           ControlUnit& controlUnit, int selectionStrategy);
+    
+    // Update reference for similarity strategy
+    void updateSimilarityReference(const cv::Mat& frame, const cv::Rect& box);
 
 private:
-    std::unique_ptr<SelectionStrategy> createSelectionStrategy(int strategy);
+    DetectionFailure detectionFailure_;
 }; 

@@ -11,7 +11,6 @@
 #include <opencv2/opencv.hpp>
 
 std::atomic<bool> Application::m_running(true);
-
 Application::Application() : m_operationMode(0), m_showTrackingPath(false), m_selectionStrategy(0) {
     setupSignalHandler();
 }
@@ -51,7 +50,10 @@ bool Application::initialize(const std::string& configPath) {
         if (!initializeModels()) return false;
         if (!initializeTracker()) return false;
         
-        //initializeSafetyManager();
+        initializeSafetyManager();
+        
+        // Initialize frame buffer configuration
+        initializeFrameBuffer();
 
         m_controlUnit.setDetectionMode(config_utils::getConfigInt(m_config, "detection.mode"));
         m_controlUnit.setDetectionInterval(config_utils::getConfigInt(m_config, "detection.interval"));
@@ -95,6 +97,19 @@ void Application::logConfiguration() const {
     }
     
     std::cout << "Detection Mode: " << (config_utils::getConfigInt(m_config, "detection.mode") == 0 ? "Interval" : "Continuous") << std::endl;
+
+    // Display selection strategy
+    std::string strategyName;
+    switch (m_selectionStrategy) {
+        case 0: strategyName = "Highest Confidence"; break;
+        case 1: strategyName = "Upper Bounding Box"; break;
+        case 2: strategyName = "Lower Bounding Box"; break;
+        case 3: strategyName = "Rightmost Bounding Box"; break;
+        case 4: strategyName = "Leftmost Bounding Box"; break;
+        case 5: strategyName = "Similarity Based"; break;
+        default: strategyName = "Unknown"; break;
+    }
+    std::cout << "Selection Strategy: " << strategyName << std::endl;
 
     bool trafficIntensityEnabled = config_utils::getConfigInt(m_config, "traffic_intensity.enabled") == 1;
     std::cout << "Traffic Intensity: " << (trafficIntensityEnabled ? "Enabled" : "Disabled") << std::endl;
@@ -176,6 +191,17 @@ void Application::initializeSafetyManager() {
     m_safetyManager.loadTrafficIntensity(m_config);
 }
 
+void Application::initializeFrameBuffer() {
+    // Configure frame buffer cleanup interval from config
+    int cleanupInterval = config_utils::getConfigInt(m_config, "frame_buffer.cleanup_interval");
+    if (cleanupInterval > 0) {
+        FrameBufferManager::getInstance().setCleanupInterval(cleanupInterval);
+        std::cout << "Frame buffer cleanup interval set to: " << cleanupInterval << " frames" << std::endl;
+    } else {
+        std::cout << "Using default frame buffer cleanup interval: 100 frames" << std::endl;
+    }
+}
+
 void Application::run() {
     std::cout << "=== System Ready - Processing Started ===" << std::endl;
 
@@ -185,6 +211,21 @@ void Application::run() {
 
     std::thread trackerThread;
     if (m_operationMode == 0) {
+        m_detectionFailure.setSelectionStrategy(m_selectionStrategy);
+        
+        // Configure enhanced similarity parameters if similarity strategy is selected
+        if (m_selectionStrategy == 5) { // Similarity strategy
+            double spatialWeight = config_utils::getConfigFloat(m_config, "similarity.spatial_weight");
+            double appearanceWeight = config_utils::getConfigFloat(m_config, "similarity.appearance_weight");
+            double sizeWeight = config_utils::getConfigFloat(m_config, "similarity.size_weight");
+            double maxMovement = config_utils::getConfigFloat(m_config, "similarity.max_expected_movement");
+            double similarityThreshold = config_utils::getConfigFloat(m_config, "similarity.similarity_threshold");
+            
+            m_detectionFailure.configureSimilarityWeights(spatialWeight, appearanceWeight, sizeWeight, maxMovement);
+            m_detectionFailure.setSimilarityThreshold(similarityThreshold);
+            std::cout << "Enhanced similarity configured with threshold: " << similarityThreshold << std::endl;
+        }
+        
         trackerThread = std::thread(&Application::trackingThread, this);
     }
 
@@ -196,6 +237,8 @@ void Application::run() {
 
 void Application::detectionThread() {
     DetectionManager detectionManager(m_visualizer);
+    
+    // Use the public runDetectionLoop method which handles the detection loop internally
     detectionManager.runDetectionLoop(m_modelManager, m_running, m_controlUnit, m_selectionStrategy, m_safetyManager);
 }
 
@@ -203,6 +246,18 @@ void Application::trackingThread() {
     while(m_running) {
         if (!m_controlUnit.waitForTrackingTurn()) {
             continue;
+        }
+
+        // Handle tracker re-initialization
+        if (m_controlUnit.hasNewDetection()) {
+            cv::Rect newBox;
+            cv::Mat newFrame;
+            int newClassId;
+            m_controlUnit.getDetectionData(newBox, newFrame, newClassId);
+
+            // Start tracking with the selected detection
+            m_controlUnit.startTracking(newFrame, newBox, newClassId, m_modelManager.getClassNames());
+            m_controlUnit.markDetectionAsProcessed();
         }
 
         FrameData frameData;

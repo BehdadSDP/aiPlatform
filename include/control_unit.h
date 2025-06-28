@@ -34,6 +34,8 @@ public:
     bool hasNewDetection() const;
     bool hasTrackerFailed() const;
     void setTrackerFailed(bool failed);
+    void setTrackerFailed(bool failed, const cv::Mat& frame, const cv::Rect& box);
+    void getFailureData(cv::Mat& frame, cv::Rect& box) const;
     void setDetection(const cv::Rect& box, const cv::Mat& frame, uint64_t frameSeq, int classId);
     void clearDetection();
     void getDetectionData(cv::Rect& box, cv::Mat& frame, int& classId) const;
@@ -41,6 +43,7 @@ public:
     
     // Tracking management (moved from TrackerManager)
     void initializeTracker(std::unique_ptr<TrackerInterface> tracker, bool showTrackingPath = true);
+    bool startTracking(const cv::Mat& frame, const cv::Rect& box, int classId, const std::vector<std::string>& classNames);
     void runTrackingLoop(std::atomic<bool>& running, class ModelManager& modelManager, class SafetyManager& safetyManager);
     void updateTracker(const cv::Mat& frame);
     
@@ -78,6 +81,8 @@ private:
     
     DetectionData detection_;
     bool trackerFailed_{false};
+    cv::Mat lastFailedFrame_;
+    cv::Rect lastFailedBox_;
     mutable std::mutex detectionMutex_;
     
     // Tracking state (moved from TrackerManager)

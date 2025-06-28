@@ -1,29 +1,56 @@
-17:44:30: Running steps for project ai...
-17:44:30: Configuration unchanged, skipping qmake step.
-17:44:30: Starting: "/usr/bin/make" -j4
-/usr/lib/qt5/bin/qmake -o Makefile ../shared_folder/aiPlatform/ai.pro -spec linux-g++ CONFIG+=debug CONFIG+=qml_debug
+08:53:18: Running steps for project ai...
+08:53:18: Configuration unchanged, skipping qmake step.
+08:53:18: Starting: "/usr/bin/make" -j4
 g++ -c -pipe -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DQT_QML_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o main.o ../shared_folder/aiPlatform/src/main.cpp
 g++ -c -pipe -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DQT_QML_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o application.o ../shared_folder/aiPlatform/src/application.cpp
-g++ -c -pipe -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DQT_QML_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o visualizer.o ../shared_folder/aiPlatform/src/visualizer.cpp
 g++ -c -pipe -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DQT_QML_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o camera_handler.o ../shared_folder/aiPlatform/src/camera_handler.cpp
-../shared_folder/aiPlatform/src/application.cpp: In member function ‘void Application::logConfiguration() const’:
-../shared_folder/aiPlatform/src/application.cpp:90:113: error: expected primary-expression before ‘.’ token
-   90 |     std::cout << "Operation Mode: " << (m_operationMode == 0 ? "Detection + Tracking" : "Detection Only") << std.endl;
-      |                                                                                                                 ^
 g++ -c -pipe -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DQT_QML_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o video_handler.o ../shared_folder/aiPlatform/src/video_handler.cpp
+../shared_folder/aiPlatform/src/camera_handler.cpp: In member function ‘void CameraHandler::applyConfiguration(std::unique_ptr<libcamera::CameraConfiguration>&, libcamera::StreamConfiguration&)’:
+../shared_folder/aiPlatform/src/camera_handler.cpp:136:5: error: ‘stream_’ was not declared in this scope; did you mean ‘streams_’?
+  136 |     stream_ = config->at(0).stream();
+      |     ^~~~~~~
+      |     streams_
+../shared_folder/aiPlatform/src/camera_handler.cpp: In member function ‘void CameraHandler::requestComplete(libcamera::Request*)’:
+../shared_folder/aiPlatform/src/camera_handler.cpp:368:47: error: request for member ‘get’ in ‘buffer’, which is of pointer type ‘std::tuple_element<1, const std::pair<const libcamera::Stream* const, libcamera::FrameBuffer*> >::type’ {aka ‘libcamera::FrameBuffer* const’} (maybe you meant to use ‘->’ ?)
+  368 |         processFrameFromStream(stream, buffer.get(), metadata);
+      |                                               ^~~
+../shared_folder/aiPlatform/src/camera_handler.cpp: In member function ‘void CameraHandler::setupStreams(const std::vector<ResolutionConfig>&)’:
+../shared_folder/aiPlatform/src/camera_handler.cpp:483:71: warning: unused parameter ‘resolutions’ [-Wunused-parameter]
+  483 | void CameraHandler::setupStreams(const std::vector<ResolutionConfig>& resolutions) {
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+In file included from /usr/include/c++/12/bits/unique_ptr.h:36,
+                 from /usr/include/c++/12/memory:76,
+                 from /usr/include/libcamera/libcamera/camera.h:11,
+                 from /usr/include/libcamera/libcamera/libcamera.h:11,
+                 from ../shared_folder/aiPlatform/include/camera_handler.h:5,
+                 from ../shared_folder/aiPlatform/src/camera_handler.cpp:1:
+/usr/include/c++/12/tuple: In instantiation of ‘std::pair<_T1, _T2>::pair(std::tuple<_Args1 ...>&, std::tuple<_Args2 ...>&, std::_Index_tuple<_Indexes1 ...>, std::_Index_tuple<_Indexes2 ...>) [with _Args1 = {const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&}; long unsigned int ..._Indexes1 = {0}; _Args2 = {}; long unsigned int ..._Indexes2 = {}; _T1 = const std::__cxx11::basic_string<char>; _T2 = ResolutionConfig]’:
+/usr/include/c++/12/tuple:1807:63:   required from ‘std::pair<_T1, _T2>::pair(std::piecewise_construct_t, std::tuple<_Args1 ...>, std::tuple<_Args2 ...>) [with _Args1 = {const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&}; _Args2 = {}; _T1 = const std::__cxx11::basic_string<char>; _T2 = ResolutionConfig]’
+/usr/include/c++/12/bits/new_allocator.h:175:4:   required from ‘void std::__new_allocator<_Tp>::construct(_Up*, _Args&& ...) [with _Up = std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig>; _Args = {const std::piecewise_construct_t&, std::tuple<const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>, std::tuple<>}; _Tp = std::_Rb_tree_node<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >]’
+/usr/include/c++/12/bits/alloc_traits.h:516:17:   required from ‘static void std::allocator_traits<std::allocator<_CharT> >::construct(allocator_type&, _Up*, _Args&& ...) [with _Up = std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig>; _Args = {const std::piecewise_construct_t&, std::tuple<const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>, std::tuple<>}; _Tp = std::_Rb_tree_node<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; allocator_type = std::allocator<std::_Rb_tree_node<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> > >]’
+/usr/include/c++/12/bits/stl_tree.h:595:32:   required from ‘void std::_Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_construct_node(_Link_type, _Args&& ...) [with _Args = {const std::piecewise_construct_t&, std::tuple<const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>, std::tuple<>}; _Key = std::__cxx11::basic_string<char>; _Val = std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig>; _KeyOfValue = std::_Select1st<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; _Compare = std::less<std::__cxx11::basic_string<char> >; _Alloc = std::allocator<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; _Link_type = std::_Rb_tree_node<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >*]’
+/usr/include/c++/12/bits/stl_tree.h:612:21:   required from ‘std::_Rb_tree_node<_Val>* std::_Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_create_node(_Args&& ...) [with _Args = {const std::piecewise_construct_t&, std::tuple<const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>, std::tuple<>}; _Key = std::__cxx11::basic_string<char>; _Val = std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig>; _KeyOfValue = std::_Select1st<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; _Compare = std::less<std::__cxx11::basic_string<char> >; _Alloc = std::allocator<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; _Link_type = std::_Rb_tree_node<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >*]’
+/usr/include/c++/12/bits/stl_tree.h:1636:32:   required from ‘std::_Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_Auto_node::_Auto_node(std::_Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>&, _Args&& ...) [with _Args = {const std::piecewise_construct_t&, std::tuple<const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>, std::tuple<>}; _Key = std::__cxx11::basic_string<char>; _Val = std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig>; _KeyOfValue = std::_Select1st<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; _Compare = std::less<std::__cxx11::basic_string<char> >; _Alloc = std::allocator<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >]’
+/usr/include/c++/12/bits/stl_tree.h:2461:13:   required from ‘std::_Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator std::_Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_emplace_hint_unique(const_iterator, _Args&& ...) [with _Args = {const std::piecewise_construct_t&, std::tuple<const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>, std::tuple<>}; _Key = std::__cxx11::basic_string<char>; _Val = std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig>; _KeyOfValue = std::_Select1st<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; _Compare = std::less<std::__cxx11::basic_string<char> >; _Alloc = std::allocator<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; iterator = std::_Rb_tree<std::__cxx11::basic_string<char>, std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig>, std::_Select1st<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >, std::less<std::__cxx11::basic_string<char> >, std::allocator<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> > >::iterator; const_iterator = std::_Rb_tree<std::__cxx11::basic_string<char>, std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig>, std::_Select1st<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >, std::less<std::__cxx11::basic_string<char> >, std::allocator<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> > >::const_iterator]’
+/usr/include/c++/12/bits/stl_map.h:511:37:   required from ‘std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = std::__cxx11::basic_string<char>; _Tp = ResolutionConfig; _Compare = std::less<std::__cxx11::basic_string<char> >; _Alloc = std::allocator<std::pair<const std::__cxx11::basic_string<char>, ResolutionConfig> >; mapped_type = ResolutionConfig; key_type = std::__cxx11::basic_string<char>]’
+../shared_folder/aiPlatform/src/camera_handler.cpp:165:36:   required from here
+/usr/include/c++/12/tuple:1818:9: error: no matching function for call to ‘ResolutionConfig::ResolutionConfig()’
+ 1818 |         second(std::forward<_Args2>(std::get<_Indexes2>(__tuple2))...)
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/include/camera_handler.h:35:5: note: candidate: ‘ResolutionConfig::ResolutionConfig(const cv::Size&, const std::string&, bool)’
+   35 |     ResolutionConfig(const cv::Size& s, const std::string& i, bool e = true)
+      |     ^~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/include/camera_handler.h:35:5: note:   candidate expects 3 arguments, 0 provided
+../shared_folder/aiPlatform/include/camera_handler.h:30:8: note: candidate: ‘ResolutionConfig::ResolutionConfig(const ResolutionConfig&)’
+   30 | struct ResolutionConfig {
+      |        ^~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/include/camera_handler.h:30:8: note:   candidate expects 1 argument, 0 provided
+../shared_folder/aiPlatform/include/camera_handler.h:30:8: note: candidate: ‘ResolutionConfig::ResolutionConfig(ResolutionConfig&&)’
+../shared_folder/aiPlatform/include/camera_handler.h:30:8: note:   candidate expects 1 argument, 0 provided
 g++ -c -pipe -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DQT_QML_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o control_unit.o ../shared_folder/aiPlatform/src/control_unit.cpp
-make: *** [Makefile:472: application.o] Error 1
+make: *** [Makefile:491: camera_handler.o] Error 1
 make: *** Waiting for unfinished jobs....
-../shared_folder/aiPlatform/src/control_unit.cpp:254:6: error: no declaration matches ‘void ControlUnit::visualizeTracking(const cv::Mat&, SafetyManager&)’
-  254 | void ControlUnit::visualizeTracking(const cv::Mat& frame, SafetyManager& safetyManager) {
-      |      ^~~~~~~~~~~
-../shared_folder/aiPlatform/src/control_unit.cpp:254:6: note: no functions named ‘void ControlUnit::visualizeTracking(const cv::Mat&, SafetyManager&)’
-In file included from ../shared_folder/aiPlatform/src/control_unit.cpp:1:
-../shared_folder/aiPlatform/include/control_unit.h:10:7: note: ‘class ControlUnit’ defined here
-   10 | class ControlUnit {
-      |       ^~~~~~~~~~~
-make: *** [Makefile:502: control_unit.o] Error 1
-17:44:39: The process "/usr/bin/make" exited with code 2.
+08:53:27: The process "/usr/bin/make" exited with code 2.
 Error while building/deploying project ai (kit: Desktop)
 When executing step "Make"
-17:44:39: Elapsed time: 00:09.
+08:53:27: Elapsed time: 00:09.
