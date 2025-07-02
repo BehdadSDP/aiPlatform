@@ -2,7 +2,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/tracking.hpp>
 #include <string>
-#include "tracker_interface.h"
+#include "../tracker_interface.h"
 
 class VitTracker : public TrackerInterface
 {

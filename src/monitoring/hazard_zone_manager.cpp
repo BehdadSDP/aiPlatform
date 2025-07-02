@@ -1,4 +1,4 @@
-#include "include/hazard_zone_manager.h"
+#include "include/monitoring/hazard_zone_manager.h"
 #include "include/config_utils.h"
 #include <iostream>
 #include <algorithm>

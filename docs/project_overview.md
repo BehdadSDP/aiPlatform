@@ -30,8 +30,8 @@
 │ • YOLO Detector │    │   Factory       │    │   Visualizer    │    │   Manager       │
 │ • Detection     │    │ • VitTracker    │    │ • Path Tracking │    │ • Traffic       │
 │   Manager       │    │ • SiamFCPP      │    │ • Real-time     │    │   Intensity     │
-│ • Detection     │    │ • Tracker       │    │   Display       │    │   Manager       │
-│   Processor     │    │   Manager       │    │ • Performance   │    │ • Alarm System  │
+│ • Target        │    │ • Tracker       │    │   Display       │    │   Manager       │
+│   Selection     │    │   Manager       │    │ • Performance   │    │ • Alarm System  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │                       │
          ▼                       ▼                       ▼                       ▼
@@ -87,8 +87,7 @@
 ### 3. Detection System
 - **ModelManager**: Manages different AI models (YOLO variants)
 - **YOLODetector**: Implements YOLO object detection
-- **DetectionManager**: Coordinates detection operations
-- **DetectionProcessor**: Processes detection results
+- **DetectionManager**: Coordinates detection operations and processes detection results
 
 ### 4. Tracking System
 - **TrackerFactory**: Creates different tracker instances

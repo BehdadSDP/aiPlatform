@@ -1,7 +1,7 @@
 # Input settings
 [input]
 # Input type: 0 for camera, 1 for video file
-input_type=1
+input_type=0
 # Video file path (used when input_type=1)
 video_path=/home/pi5/shared_folder/aiPlatform/test/test_road.mp4
 
@@ -84,12 +84,12 @@ zone3_active=0
 [general]
 target_class_id=0
 # Operation mode: 0=detection+tracking, 1=detection only
-operation_mode=0
+operation_mode=1
 
 # Detection model configuration
 [detection_model]
 # Model type: 0=vehicle detection, 1=helmet detection, 2=face detection
-model_type=0
+model_type=2
 
 #model paths
 yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov8-vehicle.onnx
@@ -111,7 +111,7 @@ siamfc_tracking_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_t
 # Traffic Intensity Configuration
 [traffic_intensity]
 # Enable/disable traffic intensity monitoring
-enabled=1
+enabled=0
 # Visualization settings
 show_polygons=1
 show_stats=1

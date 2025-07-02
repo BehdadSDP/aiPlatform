@@ -7,7 +7,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include "tracker_interface.h"
+#include "../tracker_interface.h"
 
 class SiamFCPPTracker2 : public TrackerInterface {
 public:

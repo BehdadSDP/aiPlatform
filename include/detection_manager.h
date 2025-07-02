@@ -2,7 +2,7 @@
 
 #include "include/model_manager.h"
 #include "include/control_unit.h"
-#include "include/detection_processor.h"
+#include "include/failure_handler.h"
 #include "include/visualizer.h"
 #include "include/safety_manager.h"
 #include <atomic>
@@ -19,6 +19,12 @@ private:
     void processFrame(ModelManager& modelManager, ControlUnit& controlUnit, int selectionStrategy, SafetyManager& safetyManager);
     void handleTrackerFailure(ControlUnit& controlUnit);
     
-    std::unique_ptr<DetectionProcessor> processor_;
+    // Merged DetectionProcessor functionality
+    void processDetections(const std::vector<model::Detection>& detections, 
+                          const cv::Mat& frame, uint64_t frameSeq, 
+                          ControlUnit& controlUnit, int selectionStrategy);
+    void updateSimilarityReference(const cv::Mat& frame, const cv::Rect& box);
+    
+    DetectionFailure detectionFailure_;
     Visualizer& visualizer_;
 }; 

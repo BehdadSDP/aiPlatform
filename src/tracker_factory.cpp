@@ -1,6 +1,6 @@
 #include "include/tracker_factory.h"
-#include "include/vittracker.h"
-#include "include/siamfc_pp_tracker.h"
+#include "include/tracking/vittracker.h"
+#include "include/tracking/siamfc_pp_tracker.h"
 #include <iostream>
 #include <stdexcept>
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "include/hazard_zone_manager.h"
-#include "include/traffic_intensity_manager.h"
+#include "include/monitoring/hazard_zone_manager.h"
+#include "include/monitoring/traffic_intensity_manager.h"
 #include "include/model.h"
 #include <opencv2/opencv.hpp>
 #include <map>

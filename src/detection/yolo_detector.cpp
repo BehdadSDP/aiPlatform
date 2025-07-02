@@ -1,4 +1,4 @@
-#include "include/yolo_detector.h"
+#include "include/detection/yolo_detector.h"
 #include <fstream>
 #include <sstream>
 
@@ -30,7 +30,7 @@ bool YoloDetector::initialize(const std::string& model_path, const std::string& 
     }
 }
 
-std::vector<Detection> YoloDetector::detect(const cv::Mat& frame) {
+std::vector<model::Detection> YoloDetector::detect(const cv::Mat& frame) {
     cv::Mat blob;
     preprocess(frame, blob);
 
@@ -58,8 +58,8 @@ void YoloDetector::preprocess(const cv::Mat& frame, cv::Mat& blob) {
     cv::dnn::blobFromImage(frame, blob, 1/255.0, cv::Size(416, 416), cv::Scalar(0,0,0), true, false);
 }
 
-std::vector<Detection> YoloDetector::postprocess(const cv::Mat& frame, const std::vector<cv::Mat>& outputs) {
-    std::vector<Detection> detections;
+std::vector<model::Detection> YoloDetector::postprocess(const cv::Mat& frame, const std::vector<cv::Mat>& outputs) {
+    std::vector<model::Detection> detections;
     std::vector<int> class_ids;
     std::vector<float> confidences;
     std::vector<cv::Rect> boxes;
@@ -101,11 +101,10 @@ std::vector<Detection> YoloDetector::postprocess(const cv::Mat& frame, const std
 
     for (size_t i = 0; i < indices.size(); ++i) {
         int idx = indices[i];
-        Detection det;
-        det.bbox = boxes[idx];
+        model::Detection det;
+        det.box = boxes[idx];
         det.confidence = confidences[idx];
-        det.class_id = class_ids[idx];
-        det.class_name = class_names_[class_ids[idx]];
+        det.classId = class_ids[idx];
         detections.push_back(det);
     }
 

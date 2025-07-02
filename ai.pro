@@ -19,13 +19,13 @@ SOURCES += \
     src/model.cpp \
     src/model_manager.cpp \
     src/resource_monitor.cpp \
-    src/siamfc_pp_tracker.cpp \
-    src/vittracker.cpp \
+    src/tracking/siamfc_pp_tracker.cpp \
+    src/tracking/vittracker.cpp \
     src/tracker_factory.cpp \
     src/detection_manager.cpp \
-    src/detection_processor.cpp \
-    src/hazard_zone_manager.cpp \
-    src/traffic_intensity_manager.cpp \
+    src/detection/yolo_detector.cpp \
+    src/monitoring/hazard_zone_manager.cpp \
+    src/monitoring/traffic_intensity_manager.cpp \
     src/safety_manager.cpp
 
 # Add libcamera and dependencies
@@ -72,14 +72,14 @@ HEADERS += \
     include/model.h \
     include/model_manager.h \
     include/resource_monitor.h \
-    include/siamfc_pp_tracker.h \
-    include/vittracker.h \
+    include/tracking/siamfc_pp_tracker.h \
+    include/tracking/vittracker.h \
     include/tracker_interface.h \
     include/tracker_factory.h \
     include/detection_manager.h \
-    include/detection_processor.h \
-    include/hazard_zone_manager.h \
-    include/traffic_intensity_manager.h \
+    include/detection/yolo_detector.h \
+    include/monitoring/hazard_zone_manager.h \
+    include/monitoring/traffic_intensity_manager.h \
     include/safety_manager.h \
     include/Output/mavlink_types.h \
     include/Output/minimal/mavlink_msg_heartbeat.h \

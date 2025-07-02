@@ -1,5 +1,5 @@
 #include "include/visualizer.h"
-#include "include/traffic_intensity_manager.h"
+#include "include/monitoring/traffic_intensity_manager.h"
 #include <map>
 
 Visualizer::Visualizer() {}
