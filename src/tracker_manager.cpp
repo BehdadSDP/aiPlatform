@@ -1,10 +1,10 @@
-#include "include/tracker_factory.h"
+#include "include/tracker_manager.h"
 #include "include/tracking/vittracker.h"
 #include "include/tracking/siamfc_pp_tracker.h"
 #include <iostream>
 #include <stdexcept>
 
-std::unique_ptr<TrackerInterface> TrackerFactory::createTracker(const TrackerConfig& config) {
+std::unique_ptr<TrackerInterface> TrackerManager::createTracker(const TrackerConfig& config) {
     switch (config.type) {
         case TrackerType::VIT_TRACKER:
             return std::make_unique<VitTracker>(config.vitModelPath);

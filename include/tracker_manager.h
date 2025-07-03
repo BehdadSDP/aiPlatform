@@ -16,7 +16,7 @@ struct TrackerConfig {
     std::string siamfcTrackingModelPath;
 };
 
-class TrackerFactory {
+class TrackerManager {
 public:
     static std::unique_ptr<TrackerInterface> createTracker(const TrackerConfig& config);
 }; 

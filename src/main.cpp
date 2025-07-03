@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
             std::cerr << "Application failed to initialize." << std::endl;
             return 1;
         }
-
+        
         app.run();
 
         return 0;

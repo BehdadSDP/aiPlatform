@@ -27,7 +27,7 @@ void ResourceMonitor::startMonitoring(const std::string& logFilePath, int interv
 
         // Write header if file is empty
         if (logFile_.tellp() == 0) {
-            logFile_ << "Timestamp,CPU Usage (%),Memory Usage (MB),Temperature (°C)\n";
+            logFile_ << "Timestamp,CPU Usage (%),Total Memory (MB),Used Memory (MB),Buffers (MB),Shared (MB),Cache (MB),Available (MB),Temperature (°C)\n";
             logFile_.flush();
             std::cout << "Header written to log file" << std::endl;
         }
@@ -88,7 +88,6 @@ void ResourceMonitor::monitorLoop(int intervalSeconds) {
             timestamp << std::put_time(tm, "%Y-%m-%d %H:%M:%S");
             
             float cpuUsage = getCpuUsage();
-            float memoryUsage = getMemoryUsage();
             float temperature = getTemperature();
 
             std::lock_guard<std::mutex> lock(mutex_);
@@ -99,22 +98,40 @@ void ResourceMonitor::monitorLoop(int intervalSeconds) {
             
             // Write header if file is empty
             if (logFile_.tellp() == 0) {
-                logFile_ << "Timestamp,CPU Usage (%),Memory Usage (MB),Temperature (°C)\n";
+                logFile_ << "Timestamp,CPU Usage (%),Total Memory (MB),Used Memory (MB),Buffers (MB),Shared (MB),Cache (MB),Available (MB),Temperature (°C)\n";
                 logFile_.flush();
                 std::cout << "Header written to log file" << std::endl;
             }
             
+            MemoryUsage memUsage = getDetailedMemoryUsage();
+            
             logFile_ << timestamp.str() << ","
                     << std::fixed << std::setprecision(2) << cpuUsage << ","
-                    << std::fixed << std::setprecision(2) << memoryUsage << ","
+                    << std::fixed << std::setprecision(2) << memUsage.total << ","
+                    << std::fixed << std::setprecision(2) << memUsage.used << ","
+                    << std::fixed << std::setprecision(2) << memUsage.buffers << ","
+                    << std::fixed << std::setprecision(2) << memUsage.shared << ","
+                    << std::fixed << std::setprecision(2) << memUsage.cache << ","
+                    << std::fixed << std::setprecision(2) << memUsage.available << ","
                     << std::fixed << std::setprecision(2) << temperature << "\n";
             logFile_.flush();
             
             std::cout << "Logged metrics at " << timestamp.str() 
                       << " - CPU: " << std::fixed << std::setprecision(2) << cpuUsage 
-                      << "%, Memory: " << std::fixed << std::setprecision(2) << memoryUsage 
-                      << "MB, Temp: " << std::fixed << std::setprecision(2) << temperature 
+                      << "%, Memory: " << std::fixed << std::setprecision(2) << memUsage.used 
+                      << "/" << std::fixed << std::setprecision(2) << memUsage.total 
+                      << "MB (Used/Total), Temp: " << std::fixed << std::setprecision(2) << temperature 
                       << "°C" << std::endl;
+        
+            // Detailed memory breakdown (every 10th log to avoid spam)
+            static int logCounter = 0;
+            if (++logCounter % 10 == 0) {
+                std::cout << "  Memory Details - Used: " << std::fixed << std::setprecision(2) << memUsage.used 
+                          << "MB, Buffers: " << std::fixed << std::setprecision(2) << memUsage.buffers 
+                          << "MB, Cache: " << std::fixed << std::setprecision(2) << memUsage.cache 
+                          << "MB, Available: " << std::fixed << std::setprecision(2) << memUsage.available 
+                          << "MB" << std::endl;
+            }
         } catch (const std::exception& e) {
             std::cerr << "Resource monitoring error: " << e.what() << std::endl;
         }
@@ -162,30 +179,57 @@ float ResourceMonitor::getCpuUsage() {
     return cpu_usage;
 }
 
-float ResourceMonitor::getMemoryUsage() {
+MemoryUsage ResourceMonitor::getDetailedMemoryUsage() {
+    MemoryUsage memUsage;
     std::ifstream meminfo("/proc/meminfo");
     if (!meminfo.is_open()) {
         std::cerr << "Failed to open /proc/meminfo" << std::endl;
-        return 0.0f;
+        return memUsage;
     }
     
     std::string line;
-    unsigned long totalMem = 0, freeMem = 0, buffers = 0, cached = 0;
-    
     while (std::getline(meminfo, line)) {
         if (line.find("MemTotal:") != std::string::npos) {
-            sscanf(line.c_str(), "MemTotal: %lu", &totalMem);
+            unsigned long total;
+            sscanf(line.c_str(), "MemTotal: %lu", &total);
+            memUsage.total = total / 1024.0f; // Convert KB to MB
         } else if (line.find("MemFree:") != std::string::npos) {
-            sscanf(line.c_str(), "MemFree: %lu", &freeMem);
+            unsigned long free;
+            sscanf(line.c_str(), "MemFree: %lu", &free);
+            memUsage.free = free / 1024.0f; // Convert KB to MB
         } else if (line.find("Buffers:") != std::string::npos) {
+            unsigned long buffers;
             sscanf(line.c_str(), "Buffers: %lu", &buffers);
+            memUsage.buffers = buffers / 1024.0f; // Convert KB to MB
         } else if (line.find("Cached:") != std::string::npos) {
+            unsigned long cached;
             sscanf(line.c_str(), "Cached: %lu", &cached);
+            memUsage.cache = cached / 1024.0f; // Convert KB to MB
+        } else if (line.find("SwapTotal:") != std::string::npos) {
+            unsigned long swapTotal;
+            sscanf(line.c_str(), "SwapTotal: %lu", &swapTotal);
+            memUsage.swapTotal = swapTotal / 1024.0f; // Convert KB to MB
+        } else if (line.find("SwapFree:") != std::string::npos) {
+            unsigned long swapFree;
+            sscanf(line.c_str(), "SwapFree: %lu", &swapFree);
+            memUsage.swapFree = swapFree / 1024.0f; // Convert KB to MB
         }
     }
     
-    unsigned long usedMem = totalMem - freeMem - buffers - cached;
-    return usedMem / 1024.0f; // Convert to MB
+    // Calculate derived values
+    memUsage.used = memUsage.total - memUsage.free - memUsage.buffers - memUsage.cache;
+    memUsage.available = memUsage.free + memUsage.buffers + memUsage.cache;
+    memUsage.shared = 0; // Shared memory is not directly available in /proc/meminfo
+    memUsage.swapUsed = memUsage.swapTotal - memUsage.swapFree;
+    memUsage.swapAvailable = memUsage.swapFree;
+    
+    return memUsage;
+}
+
+float ResourceMonitor::getMemoryUsage() {
+    // Legacy method for backward compatibility
+    MemoryUsage memUsage = getDetailedMemoryUsage();
+    return memUsage.used;
 }
 
 float ResourceMonitor::getTemperature() {

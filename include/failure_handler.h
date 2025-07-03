@@ -43,6 +43,9 @@ public:
     // Get current strategy name for debugging
     std::string getCurrentStrategyName() const;
     
+    // Get current strategy ID
+    int getCurrentStrategyId() const;
+    
     // Get strategy name by ID
     static std::string getStrategyName(int strategyId);
 

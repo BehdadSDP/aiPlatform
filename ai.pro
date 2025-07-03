@@ -21,7 +21,7 @@ SOURCES += \
     src/resource_monitor.cpp \
     src/tracking/siamfc_pp_tracker.cpp \
     src/tracking/vittracker.cpp \
-    src/tracker_factory.cpp \
+    src/tracker_manager.cpp \
     src/detection_manager.cpp \
     src/detection/yolo_detector.cpp \
     src/monitoring/hazard_zone_manager.cpp \
@@ -75,7 +75,7 @@ HEADERS += \
     include/tracking/siamfc_pp_tracker.h \
     include/tracking/vittracker.h \
     include/tracker_interface.h \
-    include/tracker_factory.h \
+    include/tracker_manager.h \
     include/detection_manager.h \
     include/detection/yolo_detector.h \
     include/monitoring/hazard_zone_manager.h \

@@ -1,7 +1,7 @@
 #include "include/application.h"
 #include "include/config_utils.h"
 #include "include/resource_monitor.h"
-#include "include/tracker_factory.h"
+#include "include/tracker_manager.h"
 #include "include/detection_manager.h"
 #include "include/frame_buffer_manager.h"
 #include <iostream>
@@ -178,7 +178,7 @@ bool Application::initializeTracker() {
     trackerConfig.siamfcFeatureModelPath = config_utils::getConfigString(m_config, "detection_model.siamfc_feature_model_path");
     trackerConfig.siamfcTrackingModelPath = config_utils::getConfigString(m_config, "detection_model.siamfc_tracking_model_path");
 
-    m_tracker = TrackerFactory::createTracker(trackerConfig);
+    m_tracker = TrackerManager::createTracker(trackerConfig);
     if (!m_tracker) {
         throw std::runtime_error("Failed to initialize tracker");
     }
@@ -205,7 +205,10 @@ void Application::initializeFrameBuffer() {
 void Application::run() {
     std::cout << "=== System Ready - Processing Started ===" << std::endl;
 
-    m_controlUnit.initializeTracker(std::move(m_tracker), m_showTrackingPath);
+    // ✅ FIX: Only initialize tracker in Mode 0
+    if (m_operationMode == 0) {
+        m_controlUnit.initializeTracker(std::move(m_tracker), m_showTrackingPath);
+    }
 
     std::thread yoloThread(&Application::detectionThread, this);
 
@@ -229,8 +232,11 @@ void Application::run() {
         trackerThread = std::thread(&Application::trackingThread, this);
     }
 
+    // ✅ FIX: Cleaner thread management
     yoloThread.join();
-    if (m_operationMode == 0 && trackerThread.joinable()) {
+    
+    // Only join tracking thread if it was created (Mode 0)
+    if (m_operationMode == 0) {
         trackerThread.join();
     }
 }

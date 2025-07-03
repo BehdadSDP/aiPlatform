@@ -25,10 +25,15 @@ void DetectionManager::handleTrackerFailure(ControlUnit& controlUnit) {
         cv::Rect lastBox;
         controlUnit.getFailureData(lastFrame, lastBox);
         
-        // Update the detection manager with the failure reference
-        updateSimilarityReference(lastFrame, lastBox);
-        
-        std::cout << "Tracker failure detected. Updated similarity reference." << std::endl;
+        // ✅ FIX: Only update similarity reference if similarity strategy is selected
+        // This respects the user's selection strategy choice from config.txt
+        if (detectionFailure_.getCurrentStrategyId() == DetectionFailure::SIMILARITY) {
+            updateSimilarityReference(lastFrame, lastBox);
+            std::cout << "Tracker failure detected. Updated similarity reference for similarity strategy." << std::endl;
+        } else {
+            std::cout << "Tracker failure detected. Using configured selection strategy: " 
+                      << detectionFailure_.getCurrentStrategyName() << std::endl;
+        }
         
         // Clear the tracker failure flag after processing
         controlUnit.setTrackerFailed(false);

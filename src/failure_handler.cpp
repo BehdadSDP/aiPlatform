@@ -389,18 +389,22 @@ void DetectionFailure::setSimilarityThreshold(double threshold) {
     std::cout << "Similarity threshold set to: " << similarityThreshold_ << std::endl;
 }
 
-std::string DetectionFailure::getCurrentStrategyName() const {
-    return getStrategyName(selectedStrategyId_);
-}
-
 std::string DetectionFailure::getStrategyName(int strategyId) {
     switch (strategyId) {
         case HIGHEST_CONFIDENCE: return "Highest Confidence";
-        case UPPER_BOX: return "Upper Bounding Box";
-        case LOWER_BOX: return "Lower Bounding Box";
-        case RIGHTMOST_BOX: return "Rightmost Bounding Box";
-        case LEFTMOST_BOX: return "Leftmost Bounding Box";
-        case SIMILARITY: return "Similarity Based";
-        default: return "Unknown";
+        case UPPER_BOX: return "Upper Box";
+        case LOWER_BOX: return "Lower Box";
+        case RIGHTMOST_BOX: return "Rightmost Box";
+        case LEFTMOST_BOX: return "Leftmost Box";
+        case SIMILARITY: return "Similarity";
+        default: return "Unknown Strategy";
     }
+}
+
+int DetectionFailure::getCurrentStrategyId() const {
+    return selectedStrategyId_;
+}
+
+std::string DetectionFailure::getCurrentStrategyName() const {
+    return getStrategyName(selectedStrategyId_);
 } 
