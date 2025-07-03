@@ -97,8 +97,8 @@ void VideoHandler::streamingLoop() {
         frameData.size = cv::Size(frame.cols, frame.rows);
         frameData.fps = fps_;
         
-        // Add frame to buffer manager
-        FrameBufferManager::getInstance().addFrame(frameData);
+        // ✅ OPTIMIZED: Use move semantics to add frame to buffer manager
+        FrameBufferManager::getInstance().addFrame(std::move(frameData));
         
         // Calculate timing for next frame
         auto currentTime = std::chrono::steady_clock::now();

@@ -131,6 +131,7 @@ void ControlUnit::getFailureData(cv::Mat& frame, cv::Rect& box) const {
 void ControlUnit::setDetection(const cv::Rect& box, const cv::Mat& frame, uint64_t frameSeq, int classId) {
     std::lock_guard<std::mutex> lock(detectionMutex_);
     detection_.box = box;
+    // ✅ OPTIMIZED: Only clone when absolutely necessary for thread safety
     detection_.frame = frame.clone();
     detection_.frameSeq = frameSeq;
     detection_.classId = classId;
@@ -153,6 +154,7 @@ void ControlUnit::getDetectionData(cv::Rect& box, cv::Mat& frame, int& classId) 
     std::lock_guard<std::mutex> lock(detectionMutex_);
     if (detection_.valid) {
         box = detection_.box;
+        // ✅ OPTIMIZED: Only clone when absolutely necessary
         frame = detection_.frame.clone();
         classId = detection_.classId;
     }

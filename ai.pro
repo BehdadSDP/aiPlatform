@@ -83,4 +83,5 @@ HEADERS += \
     include/safety_manager.h \
     include/Output/mavlink_types.h \
     include/Output/minimal/mavlink_msg_heartbeat.h \
-    include/Output/protocol.h
+    include/Output/protocol.h \
+    include/frame_pool.h

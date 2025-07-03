@@ -317,8 +317,8 @@ void CameraHandler::requestComplete(Request* request) {
         frameData.size = cv::Size(config.size.width, config.size.height);
         frameData.fps = fps_;
 
-        // Add to buffer
-        FrameBufferManager::getInstance().addFrame(frameData);
+        // ✅ OPTIMIZED: Use move semantics to add frame to buffer
+        FrameBufferManager::getInstance().addFrame(std::move(frameData));
 
         // Increment camera counter
         controlUnit_.notifyNewFrame();

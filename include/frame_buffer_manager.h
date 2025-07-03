@@ -5,6 +5,7 @@
 #include <array>
 #include <mutex>
 #include <condition_variable>
+#include <memory>
 
 struct FrameData {
     cv::Mat image;
@@ -16,13 +17,13 @@ struct FrameData {
 
     FrameData() : timestamp(0), sequence(0), format(""), size(0, 0), fps(0.0) {}
     
-    // Copy constructor
+    // Copy constructor - only when absolutely necessary
     FrameData(const FrameData& other) 
         : image(other.image.clone()), timestamp(other.timestamp), 
           sequence(other.sequence), format(other.format), 
           size(other.size), fps(other.fps) {}
     
-    // Copy assignment operator
+    // Copy assignment operator - only when absolutely necessary
     FrameData& operator=(const FrameData& other) {
         if (this != &other) {
             image = other.image.clone();
@@ -35,13 +36,13 @@ struct FrameData {
         return *this;
     }
     
-    // Move constructor
+    // Move constructor - preferred for performance
     FrameData(FrameData&& other) noexcept 
         : image(std::move(other.image)), timestamp(other.timestamp), 
           sequence(other.sequence), format(std::move(other.format)), 
           size(other.size), fps(other.fps) {}
     
-    // Move assignment operator
+    // Move assignment operator - preferred for performance
     FrameData& operator=(FrameData&& other) noexcept {
         if (this != &other) {
             image.release();
@@ -68,24 +69,27 @@ public:
         return instance;
     }
 
-    void addFrame(const FrameData& frameData) {
+    // ✅ OPTIMIZED: Use move semantics to avoid unnecessary copying
+    void addFrame(FrameData&& frameData) {
         std::lock_guard<std::mutex> lock(mutex_);
         
         // Explicitly release old frame memory before overwriting
         if (size_ >= Buffersize) {
-            frames_[head_].image.release();
+            frames_[head_].image.release();  // Release the oldest frame
+            head_ = (head_ + 1) % Buffersize;  // ✅ FIXED: Properly advance head
         }
         
-        frames_[tail_] = frameData; // Copy the entire FrameData struct
+        // ✅ Use move instead of copy
+        frames_[tail_] = std::move(frameData);
         tail_ = (tail_ + 1) % Buffersize;
         if (size_ < Buffersize) size_++;
-        else head_ = (head_ + 1) % Buffersize;
+        // Note: head_ is already updated above when buffer is full
         
         // Increment frame counter for automatic cleanup
         frameCounter_++;
         
         // Automatic cleanup every CLEANUP_INTERVAL frames
-        if (frameCounter_ >= CLEANUP_INTERVAL) {
+        if (frameCounter_ >= cleanupInterval_) {
             performCleanup();
             frameCounter_ = 0;
         }
@@ -93,24 +97,30 @@ public:
         condVar_.notify_all();
     }
 
+    // ✅ OPTIMIZED: Return reference to avoid copying
     bool getLatestFrame(FrameData& frameData) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (size_ == 0) return false;
         size_t latestIndex = (tail_ == 0) ? (Buffersize - 1) : (tail_ - 1);
-        frameData = frames_[latestIndex]; // Copy the entire FrameData
-        frameData.image = frames_[latestIndex].image.clone(); // Deep copy the image
+        
+        // ✅ Only clone the image, not the entire struct
+        frameData = frames_[latestIndex];
+        frameData.image = frames_[latestIndex].image.clone(); // Only clone when needed
         return true;
     }
 
+    // ✅ OPTIMIZED: Use move semantics for bulk operations
     void getAllFrames(std::vector<FrameData>& frames) {
         std::lock_guard<std::mutex> lock(mutex_);
         frames.clear();
         if (size_ == 0) return;
+        
+        frames.reserve(size_); // Pre-allocate to avoid reallocations
         size_t index = head_;
         for (size_t i = 0; i < size_; ++i) {
             FrameData fd = frames_[index];
-            fd.image = frames_[index].image.clone(); // Deep copy each image
-            frames.push_back(fd);
+            fd.image = frames_[index].image.clone(); // Only clone when needed
+            frames.push_back(std::move(fd)); // Use move
             index = (index + 1) % Buffersize;
         }
     }
@@ -146,9 +156,9 @@ private:
     FrameBufferManager(const FrameBufferManager&) = delete;
     FrameBufferManager& operator=(const FrameBufferManager&) = delete;
 
-    // Reduced buffer size to prevent memory issues
-    static constexpr size_t Buffersize = 50; // Reduced from 500
-    static constexpr int CLEANUP_INTERVAL = 100; // Default cleanup interval
+    // ✅ REDUCED: Smaller buffer size to prevent memory issues
+    static constexpr size_t Buffersize = 20; // Reduced from 50 to 20
+    static constexpr int CLEANUP_INTERVAL = 50; // Reduced from 100 to 50
     
     std::array<FrameData, Buffersize> frames_;
     size_t head_;

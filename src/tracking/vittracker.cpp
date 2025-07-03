@@ -32,12 +32,10 @@ bool VitTracker::init(const cv::Mat& frame, const cv::Rect& initBox)
         return false;
     }
 
-    // Make sure to use a deep copy of the frame
-    cv::Mat frameCopy = frame.clone();
-
-    // Initialize the tracker
+    // ✅ OPTIMIZED: Use frame directly instead of cloning
+    // The tracker should handle the frame data safely
     try {
-        tracker_->init(frameCopy, trackedBox_);
+        tracker_->init(frame, trackedBox_);
         std::cout << "VitTracker initialized with box: " << trackedBox_ << std::endl;
         initialized_ = true;
         trackScore_ = 1.0f; // Reset confidence
@@ -56,13 +54,11 @@ cv::Rect VitTracker::update(const cv::Mat& frame)
         return cv::Rect(); // Return empty rect if not initialized or frame is invalid
     }
 
-    // Make a clone of the frame to avoid any potential memory issues
-    cv::Mat frameCopy = frame.clone();
-
-    // Update the tracker
+    // ✅ OPTIMIZED: Use frame directly instead of cloning
+    // The tracker should handle the frame data safely
     bool isLocated = false;
     try {
-        isLocated = tracker_->update(frameCopy, trackedBox_);
+        isLocated = tracker_->update(frame, trackedBox_);
         trackScore_ = tracker_->getTrackingScore();
     } catch (const cv::Exception& e) {
         std::cerr << "TrackerVit::update failed: " << e.what() << std::endl;
