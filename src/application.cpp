@@ -66,7 +66,10 @@ bool Application::initialize(const std::string& configPath) {
     }
     return true;
 }
-
+/*
+@brief
+this is the actual function that loads the configuration from the config file
+*/
 bool Application::loadConfiguration(const std::string& configPath) {
     m_config = config_utils::loadConfig(configPath);
     if (m_config.empty()) {
@@ -79,6 +82,14 @@ bool Application::loadConfiguration(const std::string& configPath) {
     return true;
 }
 
+/*
+@brief
+input type: camera or video
+model type: vehicle, helmet, face
+operation mode: detection + tracking or detection only
+selection strategy: highest confidence, upper bounding box, lower bounding box, rightmost bounding box, leftmost bounding box, similarity based
+traffic intensity: enabled or disabled
+*/
 void Application::logConfiguration() const {
     std::cout << "=== AI Platform Starting ===" << std::endl;
     std::cout << "Input: " << (config_utils::getConfigInt(m_config, "input.input_type") == 0 ? "Camera" : "Video") << std::endl;
@@ -115,6 +126,13 @@ void Application::logConfiguration() const {
     std::cout << "Traffic Intensity: " << (trafficIntensityEnabled ? "Enabled" : "Disabled") << std::endl;
 }
 
+/*
+@brief
+initialize input source: camera or video 
+resolution
+frame rate
+resolution index
+*/
 bool Application::initializeInputSource() {
     int inputType = config_utils::getConfigInt(m_config, "input.input_type");
     if (inputType == 0) {
@@ -138,7 +156,14 @@ bool Application::initializeInputSource() {
     }
     return true;
 }
-
+/
+/*
+@brief
+initialize models: vehicle, helmet, face
+model type: yolo
+model path: path to model file
+model names: path to model names file
+*/
 bool Application::initializeModels() {
     ModelConfig modelConfig;
     int modelType = config_utils::getConfigInt(m_config, "detection_model.model_type");
@@ -166,6 +191,13 @@ bool Application::initializeModels() {
     return true;
 }
 
+/*
+@brief
+initialize tracker: vittracker, siamfc
+tracker type: vittracker, siamfc
+tracker path: path to tracker file
+tracker names: path to tracker names file
+*/
 bool Application::initializeTracker() {
     if (m_operationMode != 0) {
         std::cout << "Detection-only mode: Tracker disabled" << std::endl;
@@ -186,11 +218,22 @@ bool Application::initializeTracker() {
     return true;
 }
 
+/*
+@brief
+initialize safety manager: hazard zones, traffic intensity
+hazard zones: path to hazard zones file
+traffic intensity: path to traffic intensity file
+*/
 void Application::initializeSafetyManager() {
     m_safetyManager.loadHazardZones(m_config);
     m_safetyManager.loadTrafficIntensity(m_config);
 }
 
+/*
+@brief
+initialize frame buffer: cleanup interval
+cleanup interval: interval in frames to cleanup frame buffer
+*/
 void Application::initializeFrameBuffer() {
     // Configure frame buffer cleanup interval from config
     int cleanupInterval = config_utils::getConfigInt(m_config, "frame_buffer.cleanup_interval");
@@ -202,6 +245,12 @@ void Application::initializeFrameBuffer() {
     }
 }
 
+/*
+@brief
+run the application
+detection thread
+tracking thread
+*/
 void Application::run() {
     std::cout << "=== System Ready - Processing Started ===" << std::endl;
 
@@ -248,6 +297,14 @@ void Application::detectionThread() {
     detectionManager.runDetectionLoop(m_modelManager, m_running, m_controlUnit, m_selectionStrategy, m_safetyManager);
 }
 
+/*
+@brief
+tracking thread
+update tracker
+visualize tracking
+draw safety overlays
+display frame
+*/
 void Application::trackingThread() {
     while(m_running) {
         if (!m_controlUnit.waitForTrackingTurn()) {
@@ -292,6 +349,10 @@ void Application::trackingThread() {
     cv::destroyAllWindows();
 }
 
+/*
+@brief
+cleanup: cleanup camera and video handler
+*/
 void Application::cleanup() {
     if (m_cameraHandler) {
         m_cameraHandler->cleanup();
