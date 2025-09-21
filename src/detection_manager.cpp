@@ -1,6 +1,5 @@
 #include "include/detection_manager.h"
 #include "include/frame_buffer_manager.h"
-#include "include/monitoring/traffic_intensity_manager.h"
 #include <thread>
 #include <chrono>
 
@@ -8,11 +7,17 @@ DetectionManager::DetectionManager(Visualizer& visualizer) : visualizer_(visuali
 }
 
 void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<bool>& running, 
-                                       ControlUnit& controlUnit, int selectionStrategy, 
-                                       SafetyManager& safetyManager) {
+                                       ControlUnit& controlUnit, int selectionStrategy) {
     detectionFailure_.setSelectionStrategy(selectionStrategy);
     
     while (running) {
+        // Check if detection should run based on detection mode
+        if (!controlUnit.waitForDetectionTurn()) {
+            // Detection is sleeping - tracker is running successfully
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+        
         FrameData frameData;
         if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -22,7 +27,8 @@ void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<
         cv::Mat frame = frameData.image;
         if (frame.empty()) continue;
         
-        // ✅ OPTIMIZED: Process frame directly without additional cloning
+        // Only run detection when waitForDetectionTurn() allows it
+        // std::cout << "Detection running..." << std::endl; // Debug: Uncomment to see when detection runs
         std::vector<model::Detection> detections = modelManager.detect(frame);
         
         if (!detections.empty()) {
@@ -36,14 +42,10 @@ void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<
                 controlUnit.setDetection(selectedBox, frame, frameData.sequence, selectedClassId);
                 
                 // ✅ OPTIMIZED: Use frame by reference for visualization
-                // Create a dummy TrafficIntensityManager for visualization
-                TrafficIntensityManager dummyTrafficManager;
-                visualizer_.visualizeDetections(frame, detections, modelManager.getClassNames(), dummyTrafficManager);
+                visualizer_.visualizeDetections(frame, detections, modelManager.getClassNames());
             }
         }
         
-        // ✅ OPTIMIZED: Use frame by reference for safety overlays
-        safetyManager.drawSafetyOverlays(frame);
         visualizer_.displayFrame(frame, "Detection View");
         
         // Handle tracker failure recovery
@@ -75,7 +77,7 @@ void DetectionManager::handleTrackerFailure(ControlUnit& controlUnit) {
     }
 }
 
-void DetectionManager::processFrame(ModelManager& modelManager, ControlUnit& controlUnit, int selectionStrategy, SafetyManager& safetyManager) {
+void DetectionManager::processFrame(ModelManager& modelManager, ControlUnit& controlUnit, int selectionStrategy) {
     // Get the latest frame
     FrameData frameData;
     if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
@@ -91,15 +93,8 @@ void DetectionManager::processFrame(ModelManager& modelManager, ControlUnit& con
     // Get class names from model manager
     const std::vector<std::string>& classNames = modelManager.getClassNames();
 
-    // Process safety monitoring (hazard zones and traffic intensity)
-    safetyManager.processDetections(detections, classNames);
-
     // Visualize detections (draws on frame but doesn't display)
-    // Use the new method that considers traffic intensity polygons
-    visualizer_.visualizeDetections(frame, detections, classNames, safetyManager.getTrafficIntensityManager());
-    
-    // Draw safety overlays (hazard zones and traffic intensity)
-    safetyManager.drawSafetyOverlays(frame);
+    visualizer_.visualizeDetections(frame, detections, classNames);
 
     // Now display the complete frame with all overlays
     visualizer_.displayFrame(frame);

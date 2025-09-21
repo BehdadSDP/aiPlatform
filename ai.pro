@@ -24,9 +24,6 @@ SOURCES += \
     src/tracker_manager.cpp \
     src/detection_manager.cpp \
     src/detection/yolo_detector.cpp \
-    src/monitoring/hazard_zone_manager.cpp \
-    src/monitoring/traffic_intensity_manager.cpp \
-    src/safety_manager.cpp
 
 # Add libcamera and dependencies
 LIBS += -L/usr/lib -lcamera-base -lpisp -lcamera
@@ -78,10 +75,4 @@ HEADERS += \
     include/tracker_manager.h \
     include/detection_manager.h \
     include/detection/yolo_detector.h \
-    include/monitoring/hazard_zone_manager.h \
-    include/monitoring/traffic_intensity_manager.h \
-    include/safety_manager.h \
-    include/Output/mavlink_types.h \
-    include/Output/minimal/mavlink_msg_heartbeat.h \
-    include/Output/protocol.h \
-    include/frame_pool.h
+    include/frame_pool.h \

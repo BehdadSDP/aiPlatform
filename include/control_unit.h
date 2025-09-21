@@ -44,7 +44,7 @@ public:
     // Tracking management (moved from TrackerManager)
     void initializeTracker(std::unique_ptr<TrackerInterface> tracker, bool showTrackingPath = true);
     bool startTracking(const cv::Mat& frame, const cv::Rect& box, int classId, const std::vector<std::string>& classNames);
-    void runTrackingLoop(std::atomic<bool>& running, class ModelManager& modelManager, class SafetyManager& safetyManager);
+    void runTrackingLoop(std::atomic<bool>& running, class ModelManager& modelManager);
     void updateTracker(const cv::Mat& frame);
     
     // Tracking state access

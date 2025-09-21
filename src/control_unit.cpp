@@ -1,7 +1,6 @@
 #include "include/control_unit.h"
 #include "include/frame_buffer_manager.h"
 #include "include/model_manager.h"
-#include "include/safety_manager.h"
 #include <iostream>
 #include <chrono>
 
@@ -44,6 +43,7 @@ bool ControlUnit::waitForDetectionTurn(int timeoutMs) {
     std::unique_lock<std::mutex> lock(syncMutex_);
     
     if (detectionMode_ == 0) {
+        // Mode 0: Time-based detection (interval-based)
         auto now = std::chrono::steady_clock::now();
         if (lastDetectionTime_ + std::chrono::milliseconds(detectionInterval_) > now) {
             return detectionCV_.wait_for(lock, std::chrono::milliseconds(timeoutMs), 
@@ -56,17 +56,22 @@ bool ControlUnit::waitForDetectionTurn(int timeoutMs) {
         return true;
     }
     else {
+        // Mode 1: Tracker-initialization-based detection (continuous)
+        // Detection should run when:
+        // 1. No tracker is currently running (!isTracking_) OR
+        // 2. Tracker has failed (trackerFailed_)
         bool shouldRun;
         {
             std::lock_guard<std::mutex> detLock(detectionMutex_);
-            shouldRun = !detection_.valid || trackerFailed_;
+            shouldRun = !isTracking_ || trackerFailed_;
         }
         
         if (!shouldRun) {
+            // Wait until tracker fails or stops tracking
             return detectionCV_.wait_for(lock, std::chrono::milliseconds(timeoutMs),
                 [this]() {
                     std::lock_guard<std::mutex> detLock(detectionMutex_);
-                    return !detection_.valid || trackerFailed_;
+                    return !isTracking_ || trackerFailed_;
                 });
         }
         
@@ -181,11 +186,30 @@ bool ControlUnit::startTracking(const cv::Mat& frame, const cv::Rect& box, int c
             lastTrackBox_ = box;
             trackedClassId_ = classId;
             trackingPath_.clear();
-            trackingPath_.push_back(cv::Point(box.x + box.width / 2, box.y + box.height / 2));
+            
+            // Only build tracking path if visualization is enabled
+            if (showTrackingPath_) {
+                trackingPath_.push_back(cv::Point(box.x + box.width / 2, box.y + box.height / 2));
+            }
+            
+            // Clear tracker failure flag and detection data since we successfully started tracking
+            {
+                std::lock_guard<std::mutex> lock(detectionMutex_);
+                trackerFailed_ = false;
+                // Clear detection to prevent repeated initialization attempts
+                detection_.valid = false;
+                detection_.newDetection = false;
+            }
             
             std::string className = (classId >= 0 && classId < static_cast<int>(classNames.size())) ?
                                   classNames[classId] : "Unknown";
             std::cout << "Tracking initialized: " << className << " [" << box.width << "x" << box.height << "]" << std::endl;
+            
+            // In detection mode 1, notify detection thread that it should stop running
+            if (detectionMode_ == 1) {
+                detectionCV_.notify_one();
+            }
+            
             return true;
         } else {
             std::cerr << "Tracker initialization failed" << std::endl;
@@ -199,7 +223,7 @@ bool ControlUnit::startTracking(const cv::Mat& frame, const cv::Rect& box, int c
     }
 }
 
-void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& modelManager, SafetyManager& safetyManager) {
+void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& modelManager) {
     while (running) {
         if (!waitForTrackingTurn()) {
             continue;
@@ -214,18 +238,6 @@ void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& mode
 
         if (isTracking_) {
             updateTracker(frame);
-            
-            // Process safety monitoring with tracking data
-            if (trackedClassId_ >= 0) {
-                std::vector<model::Detection> trackingDetections;
-                model::Detection trackingDetection;
-                trackingDetection.box = lastTrackBox_;
-                trackingDetection.classId = trackedClassId_;
-                trackingDetection.confidence = tracker_->getLastConfidence();
-                trackingDetections.push_back(trackingDetection);
-                
-                safetyManager.processDetections(trackingDetections, modelManager.getClassNames());
-            }
         }
     }
 }
@@ -244,16 +256,25 @@ void ControlUnit::updateTracker(const cv::Mat& frame) {
                 // Only set failure reference if we have a valid previous box
                 if (lastTrackBox_.width > 0 && lastTrackBox_.height > 0) {
                     setTrackerFailed(true, frame, lastTrackBox_);
-                    std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ") - Using last valid box for reference" << std::endl;
+                    std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ") - Re-enabling detection for re-initialization" << std::endl;
                 } else {
                     setTrackerFailed(true);
-                    std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ") - No valid reference available" << std::endl;
+                    std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ") - Re-enabling detection" << std::endl;
+                }
+                
+                // In detection mode 1, notify detection thread that it should resume
+                if (detectionMode_ == 1) {
+                    detectionCV_.notify_one();
                 }
             } else {
                 lastTrackBox_ = newTrackBox;  // Update the last valid box
-                trackingPath_.push_back(cv::Point(lastTrackBox_.x + lastTrackBox_.width / 2, lastTrackBox_.y + lastTrackBox_.height / 2));
-                if (trackingPath_.size() > MAX_PATH_POINTS) {
-                    trackingPath_.erase(trackingPath_.begin());
+                
+                // Only update tracking path if visualization is enabled
+                if (showTrackingPath_) {
+                    trackingPath_.push_back(cv::Point(lastTrackBox_.x + lastTrackBox_.width / 2, lastTrackBox_.y + lastTrackBox_.height / 2));
+                    if (trackingPath_.size() > MAX_PATH_POINTS) {
+                        trackingPath_.erase(trackingPath_.begin());
+                    }
                 }
             }
         }

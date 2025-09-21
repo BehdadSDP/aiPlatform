@@ -32,7 +32,7 @@ public:
         : cm_(std::make_unique<CameraManager>()), camera_(nullptr), stream_(nullptr),
           controlUnit_(controlUnit), // Store reference
           lastFrameTime_(std::chrono::steady_clock::now()), frameCount_(0), fps_(0.0),
-          frameDuration_(0), mappedBuffers_(8) {} // Pre-allocate for performance
+          frameDuration_(0), rotationAngle_(0), mappedBuffers_(8) {} // Pre-allocate for performance
 
     ~CameraHandler() { cleanup(); }
 
@@ -57,6 +57,7 @@ public:
 
     void configureCamera(int resolutionIndex, int customWidth = 0, int customHeight = 0);
     void setFrameRate(int targetFps);
+    void setRotation(int rotationAngle);
 
     void cleanup();
     void startStreaming();
@@ -90,6 +91,7 @@ private:
     unsigned int frameCount_;
     double fps_;
     int64_t frameDuration_;
+    int rotationAngle_;
     
     // Performance optimizations
     struct MappedBuffer {
@@ -102,6 +104,7 @@ private:
     void* mapBuffer(int fd, size_t length, int bufferIndex);
     void unmapBuffer(int bufferIndex);
     void cleanupMappedBuffers();
+    cv::Mat rotateImage(const cv::Mat& inputImage);
 };
 
 #endif // CAMERA_HANDLER_H

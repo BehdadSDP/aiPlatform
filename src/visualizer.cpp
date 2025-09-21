@@ -1,21 +1,14 @@
 #include "include/visualizer.h"
-#include "include/monitoring/traffic_intensity_manager.h"
 #include <map>
 
 Visualizer::Visualizer() {}
 
 void Visualizer::visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& detections, 
-                                             const std::vector<std::string>& classNames,
-                                             const TrafficIntensityManager& trafficManager) {
+                                             const std::vector<std::string>& classNames) {
     if (frame.empty()) return;
 
     for (const auto& det : detections) {
         if (det.confidence > 0.15f) {
-            if (trafficManager.isEnabled() && trafficManager.hasActivePolygons()) {
-                if (!isDetectionInTrafficPolygons(det, trafficManager)) {
-                    continue;
-                }
-            }
             
             std::string className = (det.classId >= 0 && det.classId < static_cast<int>(classNames.size())) ?
                                    classNames[det.classId] : "Unknown";
@@ -98,10 +91,3 @@ std::string Visualizer::getStatusText(const std::string& className) {
         return "";
     }
 }
-
-bool Visualizer::isDetectionInTrafficPolygons(const model::Detection& detection, 
-                                                      const TrafficIntensityManager& trafficManager) {
-    cv::Point detectionCenter(detection.box.x + detection.box.width / 2,
-                             detection.box.y + detection.box.height / 2);
-    return trafficManager.isPointInActivePolygon(detectionCenter);
-} 

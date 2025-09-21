@@ -1,7 +1,7 @@
 # Input settings
 [input]
 # Input type: 0 for camera, 1 for video file
-input_type=0
+input_type=1
 # Video file path (used when input_type=1)
 video_path=/home/pi5/shared_folder/aiPlatform/test/test_road.mp4
 
@@ -11,10 +11,12 @@ resolution_index=4
 width=640
 height=640
 frame_rate=20
+# Rotation angle: 0=no rotation, 90=90°, 180=180°, 270=270°
+rotation_angle=0
 
 # Detection settings
 [detection]
-mode=1 #mode 0 interval
+mode=1 #mode 0 interval, mode 1 continuous (tracker-based)
 interval=8000  # Optimized for detection-only mode
 # Selection strategy: 0=highest confidence, 1=upper box, 2=lower box, 3=rightmost, 4=leftmost, 5=similarity
 selection_strategy=0
@@ -40,7 +42,7 @@ tracker_type= 0
 # Visualization settings
 [visualization]
 # Enable path tracing: 0=disabled, 1=enabled
-show_tracking_path=1
+show_tracking_path=0
 # Maximum path points to store (default: 50)
 max_path_points=50
 
@@ -51,45 +53,17 @@ cleanup_interval=100
 # Buffer size (reduced from 500 to prevent memory issues)
 buffer_size=50
 
-# Hazard Zone Configuration
-[hazard_zones]
-# Global enable/disable for the entire hazard zone feature
-enabled=0
-# Global alarm settings
-alarm_enabled=1
-visual_alarm=1
-audio_alarm=0
-alarm_cooldown_ms=2000
-
-# Define hazard zones (format: x,y,width,height)
-# Test zones - positioned to be visible in most video frames
-zone1=500,500,120,80
-zone1_name=Danger Zone 1
-zone1_active=1
-
-zone2=300,250,100,100
-zone2_name=Restricted Area
-zone2_active=0
-
-zone3=50,50,80,60
-zone3_name=Test Zone
-zone3_active=0
-
-# Additional zones (up to zone10 supported)
-# zone4=400,100,80,80
-# zone4_name=Safety Zone
-# zone4_active=0
 
 # General settings
 [general]
 target_class_id=0
 # Operation mode: 0=detection+tracking, 1=detection only
-operation_mode=1
+operation_mode=0
 
 # Detection model configuration
 [detection_model]
 # Model type: 0=vehicle detection, 1=helmet detection, 2=face detection
-model_type=2
+model_type=0
 
 #model paths
 yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov8-vehicle.onnx
@@ -108,21 +82,4 @@ vittracker_model_path=/home/pi5/shared_folder/aiPlatform/models/vittracker.onnx
 siamfc_feature_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracker_feature.onnx
 siamfc_tracking_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracking.onnx
 
-# Traffic Intensity Configuration
-[traffic_intensity]
-# Enable/disable traffic intensity monitoring
-enabled=0
-# Visualization settings
-show_polygons=1
-show_stats=1
 
-# Define traffic monitoring polygons (format: x1,y1,x2,y2,x3,y3,x4,y4,...)
-# Example polygon for perspective road monitoring (trapezoid shape)
-polygon1=520,250,810,250,690,200,500,200
-polygon1_name=Main Road 1
-polygon1_active=1
-
-# Additional traffic polygons (up to polygon10 supported)
-polygon2=70,250,400,250,420,200,200,200
-polygon2_name=Main Road 2
-polygon2_active=1

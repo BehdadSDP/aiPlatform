@@ -50,10 +50,8 @@ bool Application::initialize(const std::string& configPath) {
         if (!initializeModels()) return false;
         if (!initializeTracker()) return false;
         
-        initializeSafetyManager();
-        
         // Initialize frame buffer configuration
-        initializeFrameBuffer();
+        initializeFrameBuffer();  
 
         m_controlUnit.setDetectionMode(config_utils::getConfigInt(m_config, "detection.mode"));
         m_controlUnit.setDetectionInterval(config_utils::getConfigInt(m_config, "detection.interval"));
@@ -88,7 +86,6 @@ input type: camera or video
 model type: vehicle, helmet, face
 operation mode: detection + tracking or detection only
 selection strategy: highest confidence, upper bounding box, lower bounding box, rightmost bounding box, leftmost bounding box, similarity based
-traffic intensity: enabled or disabled
 */
 void Application::logConfiguration() const {
     std::cout << "=== AI Platform Starting ===" << std::endl;
@@ -121,9 +118,6 @@ void Application::logConfiguration() const {
         default: strategyName = "Unknown"; break;
     }
     std::cout << "Selection Strategy: " << strategyName << std::endl;
-
-    bool trafficIntensityEnabled = config_utils::getConfigInt(m_config, "traffic_intensity.enabled") == 1;
-    std::cout << "Traffic Intensity: " << (trafficIntensityEnabled ? "Enabled" : "Disabled") << std::endl;
 }
 
 /*
@@ -143,8 +137,14 @@ bool Application::initializeInputSource() {
                                        config_utils::getConfigInt(m_config, "camera.width"),
                                        config_utils::getConfigInt(m_config, "camera.height"));
         m_cameraHandler->setFrameRate(config_utils::getConfigFloat(m_config, "camera.frame_rate"));
+        m_cameraHandler->setRotation(config_utils::getConfigInt(m_config, "camera.rotation_angle"));
         m_cameraHandler->startStreaming();
-        std::cout << "Camera initialized: " << config_utils::getConfigInt(m_config, "camera.width") << "x" << config_utils::getConfigInt(m_config, "camera.height") << "@" << config_utils::getConfigFloat(m_config, "camera.frame_rate") << "fps" << std::endl;
+        int rotationAngle = config_utils::getConfigInt(m_config, "camera.rotation_angle");
+        std::cout << "Camera initialized: " << config_utils::getConfigInt(m_config, "camera.width") << "x" << config_utils::getConfigInt(m_config, "camera.height") << "@" << config_utils::getConfigFloat(m_config, "camera.frame_rate") << "fps";
+        if (rotationAngle != 0) {
+            std::cout << " (rotated " << rotationAngle << "°)";
+        }
+        std::cout << std::endl;
     } else if (inputType == 1) {
         std::string videoPath = config_utils::getConfigString(m_config, "input.video_path");
         m_videoHandler = std::make_unique<VideoHandler>(m_controlUnit);
@@ -156,7 +156,7 @@ bool Application::initializeInputSource() {
     }
     return true;
 }
-/
+
 /*
 @brief
 initialize models: vehicle, helmet, face
@@ -218,16 +218,6 @@ bool Application::initializeTracker() {
     return true;
 }
 
-/*
-@brief
-initialize safety manager: hazard zones, traffic intensity
-hazard zones: path to hazard zones file
-traffic intensity: path to traffic intensity file
-*/
-void Application::initializeSafetyManager() {
-    m_safetyManager.loadHazardZones(m_config);
-    m_safetyManager.loadTrafficIntensity(m_config);
-}
 
 /*
 @brief
@@ -259,7 +249,7 @@ void Application::run() {
         m_controlUnit.initializeTracker(std::move(m_tracker), m_showTrackingPath);
     }
 
-    std::thread yoloThread(&Application::detectionThread, this);
+    std::thread yoloThread(&Application::modelsThread, this);
 
     std::thread trackerThread;
     if (m_operationMode == 0) {
@@ -290,11 +280,11 @@ void Application::run() {
     }
 }
 
-void Application::detectionThread() {
+void Application::modelsThread() {
     DetectionManager detectionManager(m_visualizer);
     
     // Use the public runDetectionLoop method which handles the detection loop internally
-    detectionManager.runDetectionLoop(m_modelManager, m_running, m_controlUnit, m_selectionStrategy, m_safetyManager);
+    detectionManager.runDetectionLoop(m_modelManager, m_running, m_controlUnit, m_selectionStrategy);
 }
 
 /*
@@ -311,16 +301,25 @@ void Application::trackingThread() {
             continue;
         }
 
-        // Handle tracker re-initialization
+        // Handle tracker initialization/re-initialization
         if (m_controlUnit.hasNewDetection()) {
-            cv::Rect newBox;
-            cv::Mat newFrame;
-            int newClassId;
-            m_controlUnit.getDetectionData(newBox, newFrame, newClassId);
+            // Only initialize tracker if:
+            // 1. No tracker is currently running, OR
+            // 2. Tracker has failed and needs re-initialization
+            if (!m_controlUnit.isTracking() || m_controlUnit.hasTrackerFailed()) {
+                cv::Rect newBox;
+                cv::Mat newFrame;
+                int newClassId;
+                m_controlUnit.getDetectionData(newBox, newFrame, newClassId);
 
-            // Start tracking with the selected detection
-            m_controlUnit.startTracking(newFrame, newBox, newClassId, m_modelManager.getClassNames());
-            m_controlUnit.markDetectionAsProcessed();
+                // Start tracking with the selected detection
+                m_controlUnit.startTracking(newFrame, newBox, newClassId, m_modelManager.getClassNames());
+                m_controlUnit.markDetectionAsProcessed();
+            } else {
+                // Tracker is already running successfully, ignore new detections
+                // std::cout << "Tracker already running - ignoring new detection" << std::endl;
+                m_controlUnit.markDetectionAsProcessed();
+            }
         }
 
         FrameData frameData;
@@ -342,12 +341,12 @@ void Application::trackingThread() {
                                              m_controlUnit.getTrackedClassId(), m_modelManager.getClassNames(),
                                              m_controlUnit.getTrackingPath());
             }
-            m_safetyManager.drawSafetyOverlays(frame);
             m_visualizer.displayFrame(frame, "Tracking View");
         }
     }
     cv::destroyAllWindows();
 }
+
 
 /*
 @brief

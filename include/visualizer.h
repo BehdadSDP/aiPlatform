@@ -6,17 +6,13 @@
 #include <string>
 #include <map>
 
-// Forward declaration to avoid circular includes
-class TrafficIntensityManager;
-
 class Visualizer {
 public:
     Visualizer();
     
     // Detection visualization
     void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& detections, 
-                           const std::vector<std::string>& classNames,
-                           const TrafficIntensityManager& trafficManager);
+                           const std::vector<std::string>& classNames);
 
     // Tracking visualization
     void visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Rect& trackedBox, 
@@ -29,8 +25,6 @@ private:
     void setupWindow(const std::string& windowName);
     cv::Scalar getClassColor(const std::string& className);
     std::string getStatusText(const std::string& className);
-    bool isDetectionInTrafficPolygons(const model::Detection& detection, 
-                                     const TrafficIntensityManager& trafficManager);
     
     std::map<std::string, bool> m_windows;
 }; 

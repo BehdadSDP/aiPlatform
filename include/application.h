@@ -5,7 +5,6 @@
 #include "include/video_handler.h"
 #include "include/model_manager.h"
 #include "include/control_unit.h"
-#include "include/safety_manager.h"
 #include "include/tracker_interface.h"
 #include "include/visualizer.h"
 #include "include/failure_handler.h"
@@ -32,17 +31,15 @@ private:
     bool initializeInputSource();
     bool initializeModels();
     bool initializeTracker();
-    void initializeSafetyManager();
     void initializeFrameBuffer();
 
-    void detectionThread();
+    void modelsThread();
     void trackingThread();
     void cleanup();
 
     static std::atomic<bool> m_running;
     ControlUnit m_controlUnit;
     ModelManager m_modelManager;
-    SafetyManager m_safetyManager;
     Visualizer m_visualizer;
     DetectionFailure m_detectionFailure;
     std::mutex m_visMutex;

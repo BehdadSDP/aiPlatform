@@ -173,6 +173,42 @@ void CameraHandler::setFrameRate(int targetFps) {
                  std::to_string(frameDuration_) + " µs)");
 }
 
+void CameraHandler::setRotation(int rotationAngle) {
+    // Validate rotation angle - only allow 0, 90, 180, 270
+    if (rotationAngle != 0 && rotationAngle != 90 && rotationAngle != 180 && rotationAngle != 270) {
+        throw CameraException("Invalid rotation angle: " + std::to_string(rotationAngle) + 
+                             ". Only 0, 90, 180, 270 degrees are supported.");
+    }
+    
+    rotationAngle_ = rotationAngle;
+    std::string rotationText = (rotationAngle == 0) ? "No rotation" :
+                              (rotationAngle == 90) ? "90° clockwise" :
+                              (rotationAngle == 180) ? "180° rotation" :
+                              "270° clockwise";
+    printMessage("Camera rotation set to: " + std::to_string(rotationAngle) + "° (" + rotationText + ")");
+}
+
+cv::Mat CameraHandler::rotateImage(const cv::Mat& inputImage) {
+    if (rotationAngle_ == 0) {
+        return inputImage.clone(); // No rotation needed
+    }
+    
+    cv::Mat rotatedImage;
+    cv::Point2f center(inputImage.cols / 2.0f, inputImage.rows / 2.0f);
+    cv::Mat rotationMatrix = cv::getRotationMatrix2D(center, rotationAngle_, 1.0);
+    
+    // Calculate new image dimensions for 90° and 270° rotations
+    cv::Size newSize;
+    if (rotationAngle_ == 90 || rotationAngle_ == 270) {
+        newSize = cv::Size(inputImage.rows, inputImage.cols);
+    } else {
+        newSize = inputImage.size();
+    }
+    
+    cv::warpAffine(inputImage, rotatedImage, rotationMatrix, newSize);
+    return rotatedImage;
+}
+
 void CameraHandler::cleanup() {
     stopStreaming();
     cleanupMappedBuffers();
@@ -299,9 +335,12 @@ void CameraHandler::requestComplete(Request* request) {
         uint8_t* data = static_cast<uint8_t*>(mappedData);
         cv::Mat rawFrame(config.size.height, config.size.width, CV_8UC3, data, config.stride);
 
+        // Apply rotation if configured
+        cv::Mat processedFrame = rotateImage(rawFrame);
+
         // Create FrameData object - MUST clone for memory safety
         FrameData frameData;
-        frameData.image = rawFrame.clone();  // Essential: buffer will be reused
+        frameData.image = processedFrame;  // Use rotated frame
         frameData.timestamp = metadata.timestamp;
         frameData.sequence = metadata.sequence;
         
@@ -314,7 +353,12 @@ void CameraHandler::requestComplete(Request* request) {
         }
         frameData.format = cachedFormat;
         
-        frameData.size = cv::Size(config.size.width, config.size.height);
+        // Update frame size to account for rotation
+        if (rotationAngle_ == 90 || rotationAngle_ == 270) {
+            frameData.size = cv::Size(config.size.height, config.size.width);
+        } else {
+            frameData.size = cv::Size(config.size.width, config.size.height);
+        }
         frameData.fps = fps_;
 
         // ✅ OPTIMIZED: Use move semantics to add frame to buffer

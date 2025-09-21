@@ -4,7 +4,6 @@
 #include "include/control_unit.h"
 #include "include/failure_handler.h"
 #include "include/visualizer.h"
-#include "include/safety_manager.h"
 #include <atomic>
 #include <memory>
 
@@ -13,10 +12,10 @@ public:
     DetectionManager(Visualizer& visualizer);
     
     void runDetectionLoop(ModelManager& modelManager, std::atomic<bool>& running, 
-                         ControlUnit& controlUnit, int selectionStrategy, SafetyManager& safetyManager);
+                         ControlUnit& controlUnit, int selectionStrategy);
 
 private:
-    void processFrame(ModelManager& modelManager, ControlUnit& controlUnit, int selectionStrategy, SafetyManager& safetyManager);
+    void processFrame(ModelManager& modelManager, ControlUnit& controlUnit, int selectionStrategy);
     void handleTrackerFailure(ControlUnit& controlUnit);
     
     // Merged DetectionProcessor functionality
