@@ -3,6 +3,14 @@ QT -= gui
 CONFIG += c++17 console
 CONFIG -= app_bundle
 
+# Fix MAVLink packed structure alignment warnings
+QMAKE_CXXFLAGS += -Wno-address-of-packed-member
+QMAKE_CXXFLAGS += -Wno-pedantic
+
+# MAVLink specific definitions for proper alignment
+DEFINES += MAVLINK_ALIGNED_FIELDS=1
+DEFINES += MAVLINK_COMMAND_24BIT=1
+
 # You can make your code fail to compile if it uses deprecated APIs.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
@@ -24,6 +32,7 @@ SOURCES += \
     src/tracker_manager.cpp \
     src/detection_manager.cpp \
     src/detection/yolo_detector.cpp \
+    src/mavlink.cpp \
 
 # Add libcamera and dependencies
 LIBS += -L/usr/lib -lcamera-base -lpisp -lcamera
@@ -76,3 +85,4 @@ HEADERS += \
     include/detection_manager.h \
     include/detection/yolo_detector.h \
     include/frame_pool.h \
+    include/mavlink.h \

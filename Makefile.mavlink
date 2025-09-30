@@ -1,0 +1,87 @@
+# Makefile for MAVLink Demo
+# Usage: make -f Makefile.mavlink
+
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -O2
+INCLUDES = -I include -I include/Output
+LIBS = -lpthread
+
+# Source files
+MAVLINK_SOURCES = src/mavlink.cpp
+DEMO_SOURCES = src/mavlink_demo.cpp
+
+# Output binaries
+DEMO_TARGET = mavlink_demo
+
+# Default target
+all: $(DEMO_TARGET)
+
+# Build the demo
+$(DEMO_TARGET): $(MAVLINK_SOURCES) $(DEMO_SOURCES)
+	@echo "🔨 Building MAVLink demo..."
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(MAVLINK_SOURCES) $(DEMO_SOURCES) $(LIBS) -o $(DEMO_TARGET)
+	@echo "✅ MAVLink demo built successfully!"
+	@echo "📖 Usage: ./$(DEMO_TARGET)"
+	@echo ""
+	@echo "⚠️  Make sure UART is properly configured on Raspberry Pi 5:"
+	@echo "   sudo raspi-config -> Interface Options -> Serial"
+	@echo "   Add to /boot/config.txt: enable_uart=1"
+	@echo "   sudo usermod -a -G dialout $$USER"
+
+# Clean build artifacts
+clean:
+	@echo "🧹 Cleaning build artifacts..."
+	rm -f $(DEMO_TARGET)
+	@echo "✅ Clean complete!"
+
+# Install dependencies (Ubuntu/Debian)
+install-deps:
+	@echo "📦 Installing dependencies..."
+	sudo apt update
+	sudo apt install -y build-essential
+	@echo "✅ Dependencies installed!"
+
+# Setup UART permissions
+setup-uart:
+	@echo "🔧 Setting up UART permissions..."
+	sudo usermod -a -G dialout $$USER
+	@echo "✅ User added to dialout group"
+	@echo "⚠️  Please logout and login again for changes to take effect"
+
+# Check UART status
+check-uart:
+	@echo "🔍 Checking UART configuration..."
+	@echo "Available UART devices:"
+	@ls -la /dev/tty* | grep -E "(ttyAMA|ttyS)" || echo "No UART devices found"
+	@echo ""
+	@echo "UART configuration in /boot/config.txt:"
+	@grep -E "(enable_uart|dtoverlay.*uart)" /boot/config.txt 2>/dev/null || echo "No UART configuration found"
+	@echo ""
+	@echo "User groups:"
+	@groups
+
+# Help target
+help:
+	@echo "📚 MAVLink Demo Makefile Help"
+	@echo "=============================="
+	@echo ""
+	@echo "Targets:"
+	@echo "  all          - Build the MAVLink demo (default)"
+	@echo "  clean        - Remove build artifacts"
+	@echo "  install-deps - Install build dependencies"
+	@echo "  setup-uart   - Setup UART permissions"
+	@echo "  check-uart   - Check UART configuration"
+	@echo "  help         - Show this help message"
+	@echo ""
+	@echo "Usage Examples:"
+	@echo "  make -f Makefile.mavlink"
+	@echo "  make -f Makefile.mavlink clean"
+	@echo "  make -f Makefile.mavlink setup-uart"
+	@echo ""
+	@echo "🚀 Quick Start:"
+	@echo "  1. make -f Makefile.mavlink install-deps"
+	@echo "  2. make -f Makefile.mavlink setup-uart"
+	@echo "  3. make -f Makefile.mavlink"
+	@echo "  4. ./mavlink_demo"
+
+.PHONY: all clean install-deps setup-uart check-uart help

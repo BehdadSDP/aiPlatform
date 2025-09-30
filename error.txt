@@ -1,80 +1,36 @@
-VitTracker initialized with box: [226 x 274 from (66, 2)]
-Tracking initialized: face  [226x274]
-VitTracker initialized with box: [226 x 273 from (66, 2)]
-Tracking initialized: face  [226x273]
-VitTracker initialized with box: [226 x 273 from (66, 2)]
-Tracking initialized: face  [226x273]
-VitTracker: Invalid bounding box: [540 x 615 from (83, 29)]
-Tracking lost (confidence: 0.00) - Re-enabling detection for re-initialization
-DEBUG: Processed 1000 frames total
-FrameBufferManager: Automatic cleanup performed. Buffer reset.
-Tracker failure detected. Using configured selection strategy: Highest Confidence
-VitTracker initialized with box: [225 x 277 from (68, 1)]
-Tracking initialized: face  [225x277]
-VitTracker: Invalid bounding box: [617 x 613 from (24, 10)]
-Tracking lost (confidence: 0.00) - Re-enabling detection for re-initialization
-Tracker failure detected. Using configured selection strategy: Highest Confidence
-VitTracker initialized with box: [221 x 280 from (65, 6)]
-Tracking initialized: face  [221x280]
-VitTracker initialized with box: [222 x 282 from (67, 0)]
-Tracking initialized: face  [222x282]
-VitTracker: Invalid bounding box: [235 x 277 from (59, -2)]
-Tracking lost (confidence: 0.00) - Re-enabling detection for re-initialization
-VitTracker initialized with box: [226 x 276 from (69, 3)]
-Tracking initialized: face  [226x276]
-VitTracker initialized with box: [225 x 277 from (64, 2)]
-Tracking initialized: face  [225x277]
-VitTracker: Invalid bounding box: [218 x 271 from (66, -1)]
-Tracking lost (confidence: 0.00) - Re-enabling detection for re-initialization
-VitTracker initialized with box: [225 x 276 from (62, 2)]
-Tracking initialized: face  [225x276]
-DEBUG: Processed 1100 frames total
-FrameBufferManager: Automatic cleanup performed. Buffer reset.
-VitTracker: Invalid bounding box: [222 x 279 from (58, -1)]
-Tracking lost (confidence: 0.00) - Re-enabling detection for re-initialization
-VitTracker initialized with box: [228 x 280 from (50, 2)]
-Tracking initialized: face  [228x280]
-VitTracker: Invalid bounding box: [154 x 300 from (-4, 8)]
-Tracking lost (confidence: 0.00) - Re-enabling detection for re-initialization
-Tracker failure detected. Using configured selection strategy: Highest Confidence
-VitTracker initialized with box: [228 x 281 from (46, 2)]
-Tracking initialized: face  [228x281]
-VitTracker: Invalid bounding box: [528 x 396 from (104, -9)]
-Tracking lost (confidence: 0.00) - Re-enabling detection for re-initialization
-Tracker failure detected. Using configured selection strategy: Highest Confidence
-VitTracker initialized with box: [231 x 279 from (36, 8)]
-Tracking initialized: face  [231x279]
-VitTracker initialized with box: [227 x 279 from (40, 4)]
-Tracking initialized: face  [227x279]
-VitTracker initialized with box: [223 x 282 from (53, 1)]
-Tracking initialized: face  [223x282]
-VitTracker initialized with box: [221 x 277 from (62, 0)]
-Tracking initialized: face  [221x277]
-VitTracker initialized with box: [222 x 275 from (62, 2)]
-Tracking initialized: face  [222x275]
-VitTracker initialized with box: [225 x 276 from (62, 0)]
-Tracking initialized: face  [225x276]
-VitTracker initialized with box: [223 x 276 from (66, 1)]
-Tracking initialized: face  [223x276]
-VitTracker initialized with box: [223 x 277 from (66, 1)]
-Tracking initialized: face  [223x277]
-DEBUG: Processed 1200 frames total
-FrameBufferManager: Automatic cleanup performed. Buffer reset.
-VitTracker initialized with box: [223 x 277 from (65, 1)]
-Tracking initialized: face  [223x277]
-VitTracker initialized with box: [224 x 277 from (65, 1)]
-Tracking initialized: face  [224x277]
-VitTracker initialized with box: [224 x 277 from (65, 1)]
-Tracking initialized: face  [224x277]
-VitTracker initialized with box: [224 x 277 from (65, 1)]
-Tracking initialized: face  [224x277]
-Logged metrics at 2025-09-20 11:44:24 - CPU: 77.77%, Memory: 1413.33/8063.20MB (Used/Total), Temp: 67.20°C
-VitTracker initialized with box: [224 x 277 from (64, 1)]
-Tracking initialized: face  [224x277]
-VitTracker initialized with box: [224 x 276 from (65, 1)]
-Tracking initialized: face  [224x276]
-VitTracker initialized with box: [223 x 277 from (63, 0)]
-Tracking initialized: face  [223x277]
-VitTracker initialized with box: [224 x 277 from (62, 0)]
-Tracking initialized: face  [224x277]
-Press <RETURN> to close this window...
+16:36:09: Running steps for project ai...
+16:36:09: Configuration unchanged, skipping qmake step.
+16:36:09: Starting: "/usr/bin/make" -j4
+g++ -c -pipe -Wno-address-of-packed-member -Wno-pedantic -O2 -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DMAVLINK_ALIGNED_FIELDS=1 -DMAVLINK_COMMAND_24BIT=1 -DQT_QML_DEBUG -DQT_NO_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o main.o ../shared_folder/aiPlatform/src/main.cpp
+g++ -c -pipe -Wno-address-of-packed-member -Wno-pedantic -O2 -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DMAVLINK_ALIGNED_FIELDS=1 -DMAVLINK_COMMAND_24BIT=1 -DQT_QML_DEBUG -DQT_NO_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o application.o ../shared_folder/aiPlatform/src/application.cpp
+g++ -c -pipe -Wno-address-of-packed-member -Wno-pedantic -O2 -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DMAVLINK_ALIGNED_FIELDS=1 -DMAVLINK_COMMAND_24BIT=1 -DQT_QML_DEBUG -DQT_NO_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o mavlink.o ../shared_folder/aiPlatform/src/mavlink.cpp
+../shared_folder/aiPlatform/src/mavlink.cpp: In member function ‘void Mavlink::testMAVLinkMessageFormat()’:
+../shared_folder/aiPlatform/src/mavlink.cpp:416:9: error: ‘heartbeat_type_’ was not declared in this scope
+  416 |         heartbeat_type_,
+      |         ^~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/src/mavlink.cpp:417:9: error: ‘heartbeat_autopilot_’ was not declared in this scope
+  417 |         heartbeat_autopilot_,
+      |         ^~~~~~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/src/mavlink.cpp:418:9: error: ‘heartbeat_base_mode_’ was not declared in this scope
+  418 |         heartbeat_base_mode_,
+      |         ^~~~~~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/src/mavlink.cpp:419:9: error: ‘heartbeat_custom_mode_’ was not declared in this scope
+  419 |         heartbeat_custom_mode_,
+      |         ^~~~~~~~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/src/mavlink.cpp:420:9: error: ‘heartbeat_system_status_’ was not declared in this scope
+  420 |         heartbeat_system_status_
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~
+make: *** [Makefile:1265: mavlink.o] Error 1
+make: *** Waiting for unfinished jobs....
+../shared_folder/aiPlatform/src/application.cpp: In member function ‘bool Application::initializeMAVLink()’:
+../shared_folder/aiPlatform/src/application.cpp:412:20: error: ‘class Mavlink’ has no member named ‘setHeartbeatParams’
+  412 |         m_mavlink->setHeartbeatParams(
+      |                    ^~~~~~~~~~~~~~~~~~
+../shared_folder/aiPlatform/src/application.cpp:421:25: error: ‘class Mavlink’ has no member named ‘startHeartbeat’
+  421 |         if (!m_mavlink->startHeartbeat(heartbeatInterval)) {
+      |                         ^~~~~~~~~~~~~~
+make: *** [Makefile:950: application.o] Error 1
+16:36:17: The process "/usr/bin/make" exited with code 2.
+Error while building/deploying project ai (kit: Desktop)
+When executing step "Make"
+16:36:17: Elapsed time: 00:09.

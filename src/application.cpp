@@ -11,7 +11,7 @@
 #include <opencv2/opencv.hpp>
 
 std::atomic<bool> Application::m_running(true);
-Application::Application() : m_operationMode(0), m_showTrackingPath(false), m_selectionStrategy(0) {
+Application::Application() : m_operationMode(0), m_showTrackingPath(false), m_selectionStrategy(0), m_mavlinkEnabled(false) {
     setupSignalHandler();
 }
 
@@ -51,7 +51,10 @@ bool Application::initialize(const std::string& configPath) {
         if (!initializeTracker()) return false;
         
         // Initialize frame buffer configuration
-        initializeFrameBuffer();  
+        initializeFrameBuffer();
+        
+        // Initialize MAVLink if enabled
+        if (!initializeMAVLink()) return false;  
 
         m_controlUnit.setDetectionMode(config_utils::getConfigInt(m_config, "detection.mode"));
         m_controlUnit.setDetectionInterval(config_utils::getConfigInt(m_config, "detection.interval"));
@@ -77,6 +80,7 @@ bool Application::loadConfiguration(const std::string& configPath) {
     m_operationMode = config_utils::getConfigInt(m_config, "general.operation_mode");
     m_showTrackingPath = config_utils::getConfigInt(m_config, "visualization.show_tracking_path") == 1;
     m_selectionStrategy = config_utils::getConfigInt(m_config, "detection.selection_strategy");
+    m_mavlinkEnabled = config_utils::getConfigInt(m_config, "mavlink.enabled") == 1;
     return true;
 }
 
@@ -118,6 +122,7 @@ void Application::logConfiguration() const {
         default: strategyName = "Unknown"; break;
     }
     std::cout << "Selection Strategy: " << strategyName << std::endl;
+    std::cout << "MAVLink: " << (m_mavlinkEnabled ? "Enabled" : "Disabled") << std::endl;
 }
 
 /*
@@ -315,6 +320,23 @@ void Application::trackingThread() {
                 // Start tracking with the selected detection
                 m_controlUnit.startTracking(newFrame, newBox, newClassId, m_modelManager.getClassNames());
                 m_controlUnit.markDetectionAsProcessed();
+                
+                // 🚁 MAVLink Integration: Send arm command when tracking starts
+                if (m_mavlink && m_mavlinkEnabled) {
+                    if (m_mavlink->isConnected()) {
+                        std::cout << "🔓 Tracking started - Attempting to ARM vehicle" << std::endl;
+                        
+                        // Try normal arm first
+                        bool armResult = m_mavlink->armDisarm(true, true);
+
+                        if (!armResult) {
+                            std::cout << "⚠️  Force arm failed, trying force arm..." << std::endl;
+                        }
+
+                    } else {
+                        std::cerr << "⚠️  MAVLink not connected - cannot send ARM command" << std::endl;
+                    }
+                }
             } else {
                 // Tracker is already running successfully, ignore new detections
                 // std::cout << "Tracker already running - ignoring new detection" << std::endl;
@@ -352,7 +374,77 @@ void Application::trackingThread() {
 @brief
 cleanup: cleanup camera and video handler
 */
+/*
+@brief
+Initialize MAVLink communication if enabled
+*/
+bool Application::initializeMAVLink() {
+    if (!m_mavlinkEnabled) {
+        std::cout << "MAVLink disabled in configuration" << std::endl;
+        return true;
+    }
+
+    try {
+        // Get MAVLink configuration
+        uint8_t systemId = static_cast<uint8_t>(config_utils::getConfigInt(m_config, "mavlink.system_id"));
+        uint8_t componentId = static_cast<uint8_t>(config_utils::getConfigInt(m_config, "mavlink.component_id"));
+        std::string uartDevice = config_utils::getConfigString(m_config, "mavlink.uart_device");
+        int baudRate = config_utils::getConfigInt(m_config, "mavlink.uart_baud_rate");
+        int heartbeatInterval = config_utils::getConfigInt(m_config, "mavlink.heartbeat_interval");
+
+        // Create MAVLink instance
+        m_mavlink = std::make_unique<Mavlink>(systemId, componentId);
+
+        // Initialize UART
+        if (!m_mavlink->initializeUART(uartDevice, baudRate)) {
+            std::cerr << "Failed to initialize MAVLink UART" << std::endl;
+            return false;
+        }
+
+        // Start MAVLink communication
+        if (!m_mavlink->start()) {
+            std::cerr << "Failed to start MAVLink communication" << std::endl;
+            return false;
+        }
+
+        // Configure heartbeat parameters for AI Platform
+        m_mavlink->setHeartbeatParams(
+            MAV_TYPE_GCS,                    // Ground Control Station / Companion Computer
+            MAV_AUTOPILOT_GENERIC,           // Generic autopilot
+            MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
+            0,                               // Custom mode
+            MAV_STATE_ACTIVE                 // System status: Active
+        );
+
+        // Start heartbeat
+        if (!m_mavlink->startHeartbeat(heartbeatInterval)) {
+            std::cerr << "Failed to start MAVLink heartbeat" << std::endl;
+            return false;
+        }
+
+        std::cout << "✅ MAVLink initialized successfully" << std::endl;
+        std::cout << "   System ID: " << static_cast<int>(systemId) << std::endl;
+        std::cout << "   Component ID: " << static_cast<int>(componentId) << std::endl;
+        std::cout << "   UART: " << uartDevice << " @ " << baudRate << " baud" << std::endl;
+        
+        // Test message format
+        m_mavlink->testMAVLinkMessageFormat();
+
+    } catch (const std::exception& e) {
+        std::cerr << "MAVLink initialization failed: " << e.what() << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 void Application::cleanup() {
+    if (m_mavlink) {
+        m_mavlink->stop();
+        m_mavlink.reset();
+        std::cout << "MAVLink communication stopped" << std::endl;
+    }
+    
     if (m_cameraHandler) {
         m_cameraHandler->cleanup();
     }

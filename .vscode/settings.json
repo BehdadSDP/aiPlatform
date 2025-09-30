@@ -67,5 +67,6 @@
         "any": "cpp",
         "cstring": "cpp",
         "filesystem": "cpp"
-    }
+    },
+    "kiroAgent.configureMCP": "Disabled"
 }

@@ -1,7 +1,7 @@
 # Input settings
 [input]
 # Input type: 0 for camera, 1 for video file
-input_type=1
+input_type=0
 # Video file path (used when input_type=1)
 video_path=/home/pi5/shared_folder/aiPlatform/test/test_road.mp4
 
@@ -53,17 +53,33 @@ cleanup_interval=100
 # Buffer size (reduced from 500 to prevent memory issues)
 buffer_size=50
 
-
 # General settings
 [general]
 target_class_id=0
 # Operation mode: 0=detection+tracking, 1=detection only
 operation_mode=0
 
+# MAVLink settings
+[mavlink]
+# Enable MAVLink communication: 0=disabled, 1=enabled
+enabled=1
+# UART device path
+uart_device=/dev/ttyAMA0
+# UART baud rate
+uart_baud_rate=57600
+# System ID for this companion computer
+system_id=1
+# Component ID for this companion computer  
+component_id=0
+# Target system ID (flight controller)
+target_system_id=1
+# Heartbeat interval in milliseconds
+heartbeat_interval=1000
+
 # Detection model configuration
 [detection_model]
 # Model type: 0=vehicle detection, 1=helmet detection, 2=face detection
-model_type=0
+model_type=2
 
 #model paths
 yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov8-vehicle.onnx
