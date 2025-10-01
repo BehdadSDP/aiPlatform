@@ -98,8 +98,7 @@ if (!mavlink.start()) {
     return -1;
 }
 
-// Start heartbeat
-mavlink.startHeartbeat(1000);  // 1 second interval
+// MAVLink is now ready for communication
 ```
 
 ### Flight Control Commands
@@ -173,7 +172,6 @@ int main() {
     Mavlink mavlink(2, 1);
     mavlink.initializeUART("/dev/ttyAMA0", 57600);
     mavlink.start();
-    mavlink.startHeartbeat(1000);
     
     // Wait for connection
     std::this_thread::sleep_for(std::chrono::seconds(3));
@@ -212,8 +210,6 @@ int main() {
 | `initializeUART()` | Initialize UART communication | `device_path`, `baud_rate` |
 | `start()` | Start communication threads | None |
 | `stop()` | Stop all communication | None |
-| `startHeartbeat()` | Begin heartbeat transmission | `interval_ms` |
-| `stopHeartbeat()` | Stop heartbeat | None |
 
 ### Flight Commands
 
@@ -326,7 +322,6 @@ bool Application::initializeMavlink() {
         return false;
     }
     
-    m_mavlink->startHeartbeat(1000);
     std::cout << "MAVLink integration initialized" << std::endl;
     return true;
 }

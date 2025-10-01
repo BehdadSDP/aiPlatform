@@ -39,8 +39,22 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
                                    const std::vector<cv::Point>& trackingPath) {
     if (frame.empty()) return;
 
+    // Draw center point of camera frame
+    cv::Point frameCenter(frame.cols / 2, frame.rows / 2);
+    cv::circle(frame, frameCenter, 5, cv::Scalar(255, 255, 255), -1); // White center point
+    cv::circle(frame, frameCenter, 8, cv::Scalar(0, 0, 0), 2); // Black border
+
     if (isTracking) {
         cv::rectangle(frame, trackedBox, cv::Scalar(0, 255, 0), 2);
+        
+        // Draw center point of tracked object bounding box
+        cv::Point objectCenter(trackedBox.x + trackedBox.width / 2, trackedBox.y + trackedBox.height / 2);
+        cv::circle(frame, objectCenter, 5, cv::Scalar(0, 255, 0), -1); // Green center point
+        cv::circle(frame, objectCenter, 8, cv::Scalar(0, 0, 0), 2); // Black border
+        
+        // Draw line between frame center and object center
+        cv::line(frame, frameCenter, objectCenter, cv::Scalar(255, 255, 0), 2); // Yellow line
+        
         std::string className = (trackedClassId >= 0 && trackedClassId < static_cast<int>(classNames.size())) ?
                                classNames[trackedClassId] : "Unknown";
         std::string label = "Tracking: " + className;

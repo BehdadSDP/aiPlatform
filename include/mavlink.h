@@ -65,35 +65,6 @@ public:
      */
     void stop();
     
-    // === HEARTBEAT MANAGEMENT ===
-    
-    /**
-     * @brief Start sending heartbeat messages periodically
-     * 
-     * @param interval_ms Heartbeat interval in milliseconds (default: 1000ms)
-     * @return true if started successfully, false otherwise
-     */
-    bool startHeartbeat(uint32_t interval_ms = 1000);
-    
-    /**
-     * @brief Stop sending heartbeat messages
-     */
-    void stopHeartbeat();
-    
-    /**
-     * @brief Set heartbeat parameters
-     * 
-     * @param type Vehicle/component type (MAV_TYPE enum)
-     * @param autopilot Autopilot type (MAV_AUTOPILOT enum)
-     * @param base_mode System mode bitmap (MAV_MODE_FLAG enum)
-     * @param custom_mode Custom mode for autopilot-specific flags
-     * @param system_status System status (MAV_STATE enum)
-     */
-    void setHeartbeatParams(uint8_t type = MAV_TYPE_GCS,
-                           uint8_t autopilot = MAV_AUTOPILOT_GENERIC,
-                           uint8_t base_mode = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-                           uint32_t custom_mode = 0,
-                           uint8_t system_status = MAV_STATE_ACTIVE);
     
     // === FLIGHT CONTROLLER COMMANDS ===
     
@@ -106,13 +77,6 @@ public:
      */
     bool armDisarm(bool arm, bool force = false);
     
-    /**
-     * @brief Set flight mode
-     * 
-     * @param mode Flight mode (depends on autopilot type)
-     * @return true if command sent successfully
-     */
-    bool setFlightMode(uint32_t mode);
     
     /**
      * @brief Request takeoff
@@ -134,6 +98,26 @@ public:
     bool land(double latitude = 0.0, double longitude = 0.0);
     
     /**
+     * @brief Send manual control command
+     * 
+     * @param x Forward/backward movement (-1000 to 1000)
+     * @param y Left/right movement (-1000 to 1000)
+     * @param z Up/down movement (-1000 to 1000)
+     * @param r Yaw rotation (-1000 to 1000)
+     * @param buttons Button states (bitmask)
+     * @return true if command sent successfully
+     */
+    bool sendManualControl(int16_t x, int16_t y, int16_t z, int16_t r, uint16_t buttons = 0);
+    
+    /**
+     * @brief Send RC override command to directly control RC channels
+     * 
+     * @param channels Array of 18 RC channel values (1000-2000 for normal range)
+     * @return true if command sent successfully
+     */
+    bool sendRCOverride(const uint16_t channels[18]);
+    
+    /**
      * @brief Check if MAVLink is properly connected and ready
      * 
      * @return true if MAVLink is initialized and running
@@ -141,9 +125,30 @@ public:
     bool isConnected() const { return uart_initialized_ && running_; }
     
     /**
+     * @brief Get current flight mode from received heartbeat
+     * 
+     * @return current custom_mode from flight controller
+     */
+    uint32_t getCurrentFlightMode() const { return current_flight_mode_; }
+    
+    /**
      * @brief Test MAVLink message format to verify proper encoding
      */
     void testMAVLinkMessageFormat();
+    
+    /**
+     * @brief Process incoming MAVLink messages and handle heartbeat
+     * 
+     * @return true if messages were processed successfully
+     */
+    bool processIncomingMessages();
+    
+    /**
+     * @brief Handle a received MAVLink message
+     * 
+     * @param msg The received MAVLink message
+     */
+    void handleReceivedMessage(const mavlink_message_t& msg);
     
 
 private:
@@ -154,20 +159,8 @@ private:
     uint8_t component_id_;
     uint8_t target_system_id_;
     
-    // Heartbeat parameters
-    uint8_t heartbeat_type_;
-    uint8_t heartbeat_autopilot_;
-    uint8_t heartbeat_base_mode_;
-    uint32_t heartbeat_custom_mode_;
-    uint8_t heartbeat_system_status_;
-    
     // Communication control
     std::atomic<bool> running_;
-    std::atomic<bool> heartbeat_running_;
-    uint32_t heartbeat_interval_ms_;
-    
-    // Threading
-    std::thread heartbeat_thread_;
     
     // UART communication
     int serial_fd_;
@@ -175,12 +168,11 @@ private:
     int baud_rate_;
     bool uart_initialized_;
     
+    // Flight mode tracking
+    uint32_t current_flight_mode_;
+    
     // === PRIVATE METHODS ===
     
-    /**
-     * @brief Heartbeat thread function
-     */
-    void heartbeatThreadFunction();
     
     /**
      * @brief Send a MAVLink message immediately

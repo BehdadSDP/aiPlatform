@@ -270,7 +270,8 @@ void Application::run() {
             
             m_detectionFailure.configureSimilarityWeights(spatialWeight, appearanceWeight, sizeWeight, maxMovement);
             m_detectionFailure.setSimilarityThreshold(similarityThreshold);
-            std::cout << "Enhanced similarity configured with threshold: " << similarityThreshold << std::endl;
+            std::cout << "En"
+                         "hanced similarity configured with threshold: " << similarityThreshold << std::endl;
         }
         
         trackerThread = std::thread(&Application::trackingThread, this);
@@ -321,22 +322,41 @@ void Application::trackingThread() {
                 m_controlUnit.startTracking(newFrame, newBox, newClassId, m_modelManager.getClassNames());
                 m_controlUnit.markDetectionAsProcessed();
                 
-                // 🚁 MAVLink Integration: Send arm command when tracking starts
-                if (m_mavlink && m_mavlinkEnabled) {
-                    if (m_mavlink->isConnected()) {
-                        std::cout << "🔓 Tracking started - Attempting to ARM vehicle" << std::endl;
+            // 🚁 MAVLink Integration: Send manual control commands only in ALT_HOLD mode
+            if (m_mavlink && m_mavlinkEnabled) {
+                if (m_mavlink->isConnected()) {
+                    uint32_t currentMode = m_mavlink->getCurrentFlightMode();
+                    
+                    // Only send manual control commands when in ALT_HOLD mode (custom_mode = 2)
+                //    if (currentMode == 2) {
+                        // Send RC override command with varying values to test servo motor output
+                        std::cout << "🔄 Sending ARM command..." << std::endl;
                         
-                        // Try normal arm first
-                        bool armResult = m_mavlink->armDisarm(true, true);
-
+                        // Send ARM command
+                        // Parameters: arm=true, force=false (no forcing)
+                        bool armResult = m_mavlink->armDisarm(true, false);
+                        
                         if (!armResult) {
-                            std::cout << "⚠️  Force arm failed, trying force arm..." << std::endl;
+                            std::cerr << "❌ Failed to send ARM command" << std::endl;
+                        } else {
+                            std::cout << "✅ ARM command sent successfully" << std::endl;
+                            uint16_t rc_channels[18] = {0};
+                            rc_channels[2] = 1600; // Channel 3 (Throttle)
+                            bool rcResult = m_mavlink->sendRCOverride(rc_channels);
+                            if (!rcResult) {
+                                std::cerr << "❌ Failed to send RC override command" << std::endl;
+                            } else {
+                                std::cout << "✅ RC override command sent successfully" << std::endl;
+                            }
                         }
-
-                    } else {
-                        std::cerr << "⚠️  MAVLink not connected - cannot send ARM command" << std::endl;
-                    }
+                //    } else {
+                //        std::cout << "⏸️  RC override skipped - Current mode: " << currentMode
+                //                  << " (ALT_HOLD required: 2)" << std::endl;
+                //    }
+                } else {
+                    std::cerr << "⚠️  MAVLink not connected - cannot send RC override" << std::endl;
                 }
+            }
             } else {
                 // Tracker is already running successfully, ignore new detections
                 // std::cout << "Tracker already running - ignoring new detection" << std::endl;
@@ -353,6 +373,11 @@ void Application::trackingThread() {
 
         if (m_controlUnit.isTracking()) {
             m_controlUnit.updateTracker(frame);
+        }
+
+        // Process incoming MAVLink messages
+        if (m_mavlink && m_mavlinkEnabled) {
+            m_mavlink->processIncomingMessages();
         }
 
         // Visualization
@@ -390,7 +415,6 @@ bool Application::initializeMAVLink() {
         uint8_t componentId = static_cast<uint8_t>(config_utils::getConfigInt(m_config, "mavlink.component_id"));
         std::string uartDevice = config_utils::getConfigString(m_config, "mavlink.uart_device");
         int baudRate = config_utils::getConfigInt(m_config, "mavlink.uart_baud_rate");
-        int heartbeatInterval = config_utils::getConfigInt(m_config, "mavlink.heartbeat_interval");
 
         // Create MAVLink instance
         m_mavlink = std::make_unique<Mavlink>(systemId, componentId);
@@ -404,21 +428,6 @@ bool Application::initializeMAVLink() {
         // Start MAVLink communication
         if (!m_mavlink->start()) {
             std::cerr << "Failed to start MAVLink communication" << std::endl;
-            return false;
-        }
-
-        // Configure heartbeat parameters for AI Platform
-        m_mavlink->setHeartbeatParams(
-            MAV_TYPE_GCS,                    // Ground Control Station / Companion Computer
-            MAV_AUTOPILOT_GENERIC,           // Generic autopilot
-            MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-            0,                               // Custom mode
-            MAV_STATE_ACTIVE                 // System status: Active
-        );
-
-        // Start heartbeat
-        if (!m_mavlink->startHeartbeat(heartbeatInterval)) {
-            std::cerr << "Failed to start MAVLink heartbeat" << std::endl;
             return false;
         }
 
@@ -452,3 +461,6 @@ void Application::cleanup() {
         m_videoHandler->cleanup();
     }
 } 
+
+
+

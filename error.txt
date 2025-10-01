@@ -1,36 +1,24 @@
-16:36:09: Running steps for project ai...
-16:36:09: Configuration unchanged, skipping qmake step.
-16:36:09: Starting: "/usr/bin/make" -j4
-g++ -c -pipe -Wno-address-of-packed-member -Wno-pedantic -O2 -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DMAVLINK_ALIGNED_FIELDS=1 -DMAVLINK_COMMAND_24BIT=1 -DQT_QML_DEBUG -DQT_NO_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o main.o ../shared_folder/aiPlatform/src/main.cpp
+11:00:21: Running steps for project ai...
+11:00:21: Configuration unchanged, skipping qmake step.
+11:00:21: Starting: "/usr/bin/make" -j4
 g++ -c -pipe -Wno-address-of-packed-member -Wno-pedantic -O2 -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DMAVLINK_ALIGNED_FIELDS=1 -DMAVLINK_COMMAND_24BIT=1 -DQT_QML_DEBUG -DQT_NO_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o application.o ../shared_folder/aiPlatform/src/application.cpp
 g++ -c -pipe -Wno-address-of-packed-member -Wno-pedantic -O2 -g -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC -DMAVLINK_ALIGNED_FIELDS=1 -DMAVLINK_COMMAND_24BIT=1 -DQT_QML_DEBUG -DQT_NO_DEBUG -DQT_CORE_LIB -I../shared_folder/aiPlatform -I. -I/usr/include/libcamera -I/usr/local/include/opencv4 -I../shared_folder/aiPlatform/include/Output -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I. -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -o mavlink.o ../shared_folder/aiPlatform/src/mavlink.cpp
-../shared_folder/aiPlatform/src/mavlink.cpp: In member function ‘void Mavlink::testMAVLinkMessageFormat()’:
-../shared_folder/aiPlatform/src/mavlink.cpp:416:9: error: ‘heartbeat_type_’ was not declared in this scope
-  416 |         heartbeat_type_,
-      |         ^~~~~~~~~~~~~~~
-../shared_folder/aiPlatform/src/mavlink.cpp:417:9: error: ‘heartbeat_autopilot_’ was not declared in this scope
-  417 |         heartbeat_autopilot_,
-      |         ^~~~~~~~~~~~~~~~~~~~
-../shared_folder/aiPlatform/src/mavlink.cpp:418:9: error: ‘heartbeat_base_mode_’ was not declared in this scope
-  418 |         heartbeat_base_mode_,
-      |         ^~~~~~~~~~~~~~~~~~~~
-../shared_folder/aiPlatform/src/mavlink.cpp:419:9: error: ‘heartbeat_custom_mode_’ was not declared in this scope
-  419 |         heartbeat_custom_mode_,
-      |         ^~~~~~~~~~~~~~~~~~~~~~
-../shared_folder/aiPlatform/src/mavlink.cpp:420:9: error: ‘heartbeat_system_status_’ was not declared in this scope
-  420 |         heartbeat_system_status_
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~
-make: *** [Makefile:1265: mavlink.o] Error 1
-make: *** Waiting for unfinished jobs....
-../shared_folder/aiPlatform/src/application.cpp: In member function ‘bool Application::initializeMAVLink()’:
-../shared_folder/aiPlatform/src/application.cpp:412:20: error: ‘class Mavlink’ has no member named ‘setHeartbeatParams’
-  412 |         m_mavlink->setHeartbeatParams(
-      |                    ^~~~~~~~~~~~~~~~~~
-../shared_folder/aiPlatform/src/application.cpp:421:25: error: ‘class Mavlink’ has no member named ‘startHeartbeat’
-  421 |         if (!m_mavlink->startHeartbeat(heartbeatInterval)) {
-      |                         ^~~~~~~~~~~~~~
+../shared_folder/aiPlatform/src/application.cpp: In member function ‘void Application::trackingThread()’:
+../shared_folder/aiPlatform/src/application.cpp:344:75: error: cannot convert ‘std::array<short unsigned int, 8>’ to ‘const uint16_t*’ {aka ‘const short unsigned int*’}
+  344 |                                 bool rcResult = m_mavlink->sendRCOverride(rc_channels);
+      |                                                                           ^~~~~~~~~~~
+      |                                                                           |
+      |                                                                           std::array<short unsigned int, 8>
+In file included from ../shared_folder/aiPlatform/include/application.h:11,
+                 from ../shared_folder/aiPlatform/src/application.cpp:1:
+../shared_folder/aiPlatform/include/mavlink.h:118:40: note:   initializing argument 1 of ‘bool Mavlink::sendRCOverride(const uint16_t*)’
+  118 |     bool sendRCOverride(const uint16_t channels[18]);
+      |                         ~~~~~~~~~~~~~~~^~~~~~~~~~~~
+../shared_folder/aiPlatform/src/application.cpp:328:30: warning: unused variable ‘currentMode’ [-Wunused-variable]
+  328 |                     uint32_t currentMode = m_mavlink->getCurrentFlightMode();
+      |                              ^~~~~~~~~~~
 make: *** [Makefile:950: application.o] Error 1
-16:36:17: The process "/usr/bin/make" exited with code 2.
+11:00:27: The process "/usr/bin/make" exited with code 2.
 Error while building/deploying project ai (kit: Desktop)
 When executing step "Make"
-16:36:17: Elapsed time: 00:09.
+11:00:27: Elapsed time: 00:06.

@@ -68,7 +68,7 @@ uart_device=/dev/ttyAMA0
 # UART baud rate
 uart_baud_rate=57600
 # System ID for this companion computer
-system_id=1
+system_id=255
 # Component ID for this companion computer  
 component_id=0
 # Target system ID (flight controller)

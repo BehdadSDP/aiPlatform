@@ -119,18 +119,8 @@ Pin 6 (GND)          →    GND
 MavlinkHandler mavlink(1, 1);  // System ID: 1, Component ID: 1
 
 // Initialize with serial communication
-if (mavlink.initialize("/dev/ttyAMA0", 57600)) {
-    // Configure heartbeat parameters
-    mavlink.setHeartbeatParams(
-        MAV_TYPE_QUADROTOR,           // Vehicle type
-        MAV_AUTOPILOT_ARDUPILOTMEGA,  // Autopilot type
-        MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,
-        0,                            // Custom mode
-        MAV_STATE_ACTIVE              // System status
-    );
-    
-    // Start sending heartbeats every 1000ms
-    mavlink.startHeartbeat(1000);
+if (mavlink.initializeUART("/dev/ttyAMA0", 57600) && mavlink.start()) {
+    // MAVLink is now ready for communication
     
     // Your application loop here
     while (running) {
@@ -138,7 +128,7 @@ if (mavlink.initialize("/dev/ttyAMA0", 57600)) {
     }
     
     // Cleanup
-    mavlink.stopHeartbeat();
+    mavlink.stop();
 }
 ```
 

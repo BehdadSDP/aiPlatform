@@ -12,18 +12,12 @@ Mavlink::Mavlink(uint8_t system_id, uint8_t component_id)
     : system_id_(system_id)
     , component_id_(component_id)
     , target_system_id_(1)  // Default target is flight controller with ID 1
-    , heartbeat_type_(MAV_TYPE_GCS)
-    , heartbeat_autopilot_(MAV_AUTOPILOT_GENERIC)
-    , heartbeat_base_mode_(MAV_MODE_FLAG_CUSTOM_MODE_ENABLED)
-    , heartbeat_custom_mode_(0)
-    , heartbeat_system_status_(MAV_STATE_ACTIVE)
     , running_(false)
-    , heartbeat_running_(false)
-    , heartbeat_interval_ms_(1000)
     , serial_fd_(-1)
     , serial_device_("")
     , baud_rate_(57600)
     , uart_initialized_(false)
+    , current_flight_mode_(0)
 {
     std::cout << "Mavlink initialized with System ID: " << static_cast<int>(system_id_)
               << ", Component ID: " << static_cast<int>(component_id_) << std::endl;
@@ -124,8 +118,6 @@ void Mavlink::stop()
     
     std::cout << "Stopping Mavlink communication..." << std::endl;
     
-    // Stop heartbeat first
-    stopHeartbeat();
     
     // Stop all threads
     running_ = false;
@@ -133,56 +125,6 @@ void Mavlink::stop()
     std::cout << "✅ Mavlink communication stopped" << std::endl;
 }
 
-bool Mavlink::startHeartbeat(uint32_t interval_ms)
-{
-    if (heartbeat_running_) {
-        std::cout << "Heartbeat is already running" << std::endl;
-        return false;
-    }
-    
-    if (!running_) {
-        std::cerr << "ERROR: Mavlink communication not started. Call start() first." << std::endl;
-        return false;
-    }
-    
-    heartbeat_interval_ms_ = interval_ms;
-    heartbeat_running_ = true;
-    
-    // Start heartbeat thread
-    heartbeat_thread_ = std::thread(&Mavlink::heartbeatThreadFunction, this);
-    
-    std::cout << "✅ Heartbeat started with interval: " << interval_ms << "ms" << std::endl;
-    return true;
-}
-
-void Mavlink::stopHeartbeat()
-{
-    if (heartbeat_running_) {
-        heartbeat_running_ = false;
-        
-        if (heartbeat_thread_.joinable()) {
-            heartbeat_thread_.join();
-        }
-        
-        std::cout << "Heartbeat stopped" << std::endl;
-    }
-}
-
-void Mavlink::setHeartbeatParams(uint8_t type, uint8_t autopilot, uint8_t base_mode, 
-                                 uint32_t custom_mode, uint8_t system_status)
-{
-    heartbeat_type_ = type;
-    heartbeat_autopilot_ = autopilot;
-    heartbeat_base_mode_ = base_mode;
-    heartbeat_custom_mode_ = custom_mode;
-    heartbeat_system_status_ = system_status;
-    
-    std::cout << "Heartbeat parameters updated - Type: " << static_cast<int>(type)
-              << ", Autopilot: " << static_cast<int>(autopilot)
-              << ", Mode: " << static_cast<int>(base_mode)
-              << ", Custom: " << custom_mode
-              << ", Status: " << static_cast<int>(system_status) << std::endl;
-}
 
 // === FLIGHT CONTROLLER COMMANDS ===
 
@@ -217,17 +159,6 @@ bool Mavlink::armDisarm(bool arm, bool force)
     return result;
 }
 
-bool Mavlink::setFlightMode(uint32_t mode)
-{
-    std::cout << "Setting flight mode to: " << mode << std::endl;
-    
-    return sendCommandLong(
-        MAV_CMD_DO_SET_MODE,
-        MAV_MODE_FLAG_CUSTOM_MODE_ENABLED,  // param1: mode flag
-        mode,  // param2: custom mode
-        0.0f, 0.0f, 0.0f, 0.0f, 0.0f
-    );
-}
 
 bool Mavlink::takeoff(float altitude, double latitude, double longitude)
 {
@@ -261,44 +192,114 @@ bool Mavlink::land(double latitude, double longitude)
     );
 }
 
+bool Mavlink::sendManualControl(int16_t x, int16_t y, int16_t z, int16_t r, uint16_t buttons)
+{
+    if (!uart_initialized_) {
+        std::cerr << "ERROR: Cannot send manual control - UART not initialized" << std::endl;
+        return false;
+    }
+    
+    if (!running_) {
+        std::cerr << "ERROR: Cannot send manual control - MAVLink not running" << std::endl;
+        return false;
+    }
+    
+    // Clamp values to valid range (-1000 to 1000)
+    x = std::max(static_cast<int16_t>(-1000), std::min(static_cast<int16_t>(1000), x));
+    y = std::max(static_cast<int16_t>(-1000), std::min(static_cast<int16_t>(1000), y));
+    z = std::max(static_cast<int16_t>(-1000), std::min(static_cast<int16_t>(1000), z));
+    r = std::max(static_cast<int16_t>(-1000), std::min(static_cast<int16_t>(1000), r));
+    
+    mavlink_message_t msg;
+    memset(&msg, 0, sizeof(msg)); // Initialize to prevent garbage data
+    
+    mavlink_msg_manual_control_pack(
+        system_id_,
+        component_id_,
+        &msg,
+        target_system_id_,  // target
+        x,                  // x: forward/backward (-1000 to 1000)
+        y,                  // y: left/right (-1000 to 1000)
+        z,                  // z: up/down (-1000 to 1000)
+        r,                  // r: yaw rotation (-1000 to 1000)
+        buttons,            // buttons: button states (bitmask)
+        0,                  // buttons2: additional buttons
+        0,                  // enabled_extensions
+        0,                  // s: additional control
+        0,                  // t: additional control
+        0, 0, 0, 0, 0, 0    // aux1-aux6: auxiliary controls
+    );
+    
+    bool result = sendMessageImmediate(msg);
+    
+    if (result) {
+        std::cout << "✅ Sent manual control - X:" << x 
+                  << " Y:" << y << " Z:" << z << " R:" << r 
+                  << " Buttons:0x" << std::hex << buttons << std::dec << std::endl;
+    } else {
+        std::cerr << "❌ Failed to send manual control command" << std::endl;
+    }
+    
+    return result;
+}
+
+bool Mavlink::sendRCOverride(const uint16_t channels[18])
+{
+    if (!uart_initialized_) {
+        std::cerr << "ERROR: Cannot send RC override - UART not initialized" << std::endl;
+        return false;
+    }
+    
+    if (!running_) {
+        std::cerr << "ERROR: Cannot send RC override - MAVLink not running" << std::endl;
+        return false;
+    }
+    
+    mavlink_message_t msg;
+    memset(&msg, 0, sizeof(msg)); // Initialize to prevent garbage data
+    
+    mavlink_msg_rc_channels_override_pack(
+        system_id_,
+        component_id_,
+        &msg,
+        target_system_id_,  // target system
+        MAV_COMP_ID_AUTOPILOT1,  // target component
+        channels[0],   // chan1_raw: Roll (Aileron)
+        channels[1],   // chan2_raw: Pitch (Elevator) 
+        channels[2],   // chan3_raw: Throttle
+        channels[3],   // chan4_raw: Yaw (Rudder)
+        channels[4],   // chan5_raw: Aux1
+        channels[5],   // chan6_raw: Aux2
+        channels[6],   // chan7_raw: Aux3
+        channels[7],   // chan8_raw: Aux4
+        channels[8],   // chan9_raw: Aux5
+        channels[9],   // chan10_raw: Aux6
+        channels[10],  // chan11_raw: Aux7
+        channels[11],  // chan12_raw: Aux8
+        channels[12],  // chan13_raw: Aux9
+        channels[13],  // chan14_raw: Aux10
+        channels[14],  // chan15_raw: Aux11
+        channels[15],  // chan16_raw: Aux12
+        channels[16],  // chan17_raw: Aux13
+        channels[17]   // chan18_raw: Aux14
+    );
+    
+    bool result = sendMessageImmediate(msg);
+    
+    if (result) {
+        std::cout << "✅ Sent RC override - Roll:" << channels[0] 
+                  << " Pitch:" << channels[1] << " Throttle:" << channels[2] 
+                  << " Yaw:" << channels[3] << std::endl;
+    } else {
+        std::cerr << "❌ Failed to send RC override command" << std::endl;
+    }
+    
+    return result;
+}
+
 
 // === PRIVATE METHODS ===
 
-void Mavlink::heartbeatThreadFunction()
-{
-    std::cout << "Heartbeat thread started" << std::endl;
-    
-    // Initialize MAVLink status for proper message handling
-    mavlink_status_t status;
-    memset(&status, 0, sizeof(status));
-    status.flags = 0; // Use MAVLink 2.0 by default
-    
-    while (heartbeat_running_) {
-        // Send heartbeat - ensure proper memory alignment
-        mavlink_message_t msg;
-        memset(&msg, 0, sizeof(msg)); // Initialize to prevent garbage data
-        
-        mavlink_msg_heartbeat_pack(
-            system_id_,
-            component_id_,
-            &msg,
-            heartbeat_type_,
-            heartbeat_autopilot_,
-            heartbeat_base_mode_,
-            heartbeat_custom_mode_,
-            heartbeat_system_status_
-        );
-        
-        if (!sendMessageImmediate(msg)) {
-            std::cerr << "Failed to send heartbeat" << std::endl;
-        }
-        
-        // Sleep for the specified interval
-        std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat_interval_ms_));
-    }
-    
-    std::cout << "Heartbeat thread stopped" << std::endl;
-}
 
 bool Mavlink::sendMessageImmediate(const mavlink_message_t& msg)
 {
@@ -495,41 +496,6 @@ void Mavlink::testMAVLinkMessageFormat()
 {
     std::cout << "🧪 Testing MAVLink message format..." << std::endl;
     
-    // Test heartbeat message
-    mavlink_message_t msg;
-    memset(&msg, 0, sizeof(msg)); // Initialize to prevent garbage data
-    mavlink_msg_heartbeat_pack(
-        system_id_,
-        component_id_,
-        &msg,
-        heartbeat_type_,
-        heartbeat_autopilot_,
-        heartbeat_base_mode_,
-        heartbeat_custom_mode_,
-        heartbeat_system_status_
-    );
-    
-    // Convert to buffer
-    uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
-    uint16_t length = mavlink_msg_to_send_buffer(buffer, &msg);
-    
-    std::cout << "Test heartbeat message:" << std::endl;
-    std::cout << "  Length: " << length << " bytes" << std::endl;
-    std::cout << "  First 16 bytes: ";
-    for (int i = 0; i < std::min(16, (int)length); i++) {
-        printf("0x%02X ", buffer[i]);
-    }
-    std::cout << std::endl;
-    
-    // Check magic byte
-    if (buffer[0] == MAVLINK_STX) {
-        std::cout << "  ✅ Correct MAVLink 2.0 magic byte (0xFD)" << std::endl;
-    } else if (buffer[0] == MAVLINK_STX_MAVLINK1) {
-        std::cout << "  ⚠️  MAVLink 1.0 magic byte (0xFE)" << std::endl;
-    } else {
-        std::cout << "  ❌ Invalid magic byte: 0x" << std::hex << (int)buffer[0] << std::dec << std::endl;
-    }
-    
     // Test ARM command
     mavlink_message_t arm_msg;
     memset(&arm_msg, 0, sizeof(arm_msg)); // Initialize to prevent garbage data
@@ -546,9 +512,10 @@ void Mavlink::testMAVLinkMessageFormat()
         0.0f, 0.0f, 0.0f, 0.0f, 0.0f // param3-7
     );
     
+    uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
     uint16_t arm_length = mavlink_msg_to_send_buffer(buffer, &arm_msg);
     
-    std::cout << "\nTest ARM command message:" << std::endl;
+    std::cout << "Test ARM command message:" << std::endl;
     std::cout << "  Length: " << arm_length << " bytes" << std::endl;
     std::cout << "  First 16 bytes: ";
     for (int i = 0; i < std::min(16, (int)arm_length); i++) {
@@ -566,4 +533,88 @@ void Mavlink::testMAVLinkMessageFormat()
     }
     
     std::cout << "🧪 MAVLink message format test completed" << std::endl;
+}
+
+bool Mavlink::processIncomingMessages()
+{
+    if (!uart_initialized_ || !running_) {
+        return false;
+    }
+    
+    uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
+    mavlink_message_t msg;
+    mavlink_status_t status;
+    
+    // Read available data from UART
+    ssize_t bytes_read = read(serial_fd_, buffer, sizeof(buffer));
+    
+    if (bytes_read <= 0) {
+        // No data available or error
+        if (bytes_read < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            std::cerr << "Error reading from UART: " << strerror(errno) << std::endl;
+            return false;
+        }
+        return true; // No data available, but not an error
+    }
+    
+    // Process each byte to parse MAVLink messages
+    for (ssize_t i = 0; i < bytes_read; i++) {
+        uint8_t result = mavlink_parse_char(MAVLINK_COMM_0, buffer[i], &msg, &status);
+        
+        if (result == MAVLINK_FRAMING_OK) {
+            // Successfully parsed a complete message
+            handleReceivedMessage(msg);
+        } else if (result == MAVLINK_FRAMING_BAD_CRC) {
+            std::cerr << "Bad CRC in MAVLink message" << std::endl;
+        }
+    }
+    
+    return true;
+}
+
+void Mavlink::handleReceivedMessage(const mavlink_message_t& msg)
+{
+    switch (msg.msgid) {
+        case MAVLINK_MSG_ID_HEARTBEAT: {
+            mavlink_heartbeat_t heartbeat;
+            mavlink_msg_heartbeat_decode(&msg, &heartbeat);
+            
+            // Update current flight mode
+            current_flight_mode_ = heartbeat.custom_mode;
+            
+            std::cout << "💓 HEARTBEAT received from System " << static_cast<int>(msg.sysid) 
+                      << ", Component " << static_cast<int>(msg.compid) << std::endl;
+            std::cout << "   Type: " << static_cast<int>(heartbeat.type) 
+                      << ", Autopilot: " << static_cast<int>(heartbeat.autopilot) << std::endl;
+            std::cout << "   Base Mode: 0x" << std::hex << static_cast<int>(heartbeat.base_mode) 
+                      << ", Custom Mode: " << std::dec << heartbeat.custom_mode << std::endl;
+            std::cout << "   System Status: " << static_cast<int>(heartbeat.system_status) 
+                      << ", MAVLink Version: " << static_cast<int>(heartbeat.mavlink_version) << std::endl;
+            break;
+        }
+        
+        case MAVLINK_MSG_ID_SYS_STATUS: {
+            mavlink_sys_status_t sys_status;
+            mavlink_msg_sys_status_decode(&msg, &sys_status);
+            
+            std::cout << "📊 SYS_STATUS received - Battery: " << sys_status.voltage_battery 
+                      << "mV, Current: " << sys_status.current_battery << "cA" << std::endl;
+            break;
+        }
+        
+        case MAVLINK_MSG_ID_ATTITUDE: {
+            mavlink_attitude_t attitude;
+            mavlink_msg_attitude_decode(&msg, &attitude);
+            
+            std::cout << "🛩️  ATTITUDE received - Roll: " << attitude.roll 
+                      << ", Pitch: " << attitude.pitch << ", Yaw: " << attitude.yaw << std::endl;
+            break;
+        }
+        
+        default:
+            std::cout << "📨 Message ID " << static_cast<int>(msg.msgid) 
+                      << " received from System " << static_cast<int>(msg.sysid) 
+                      << ", Component " << static_cast<int>(msg.compid) << std::endl;
+            break;
+    }
 }
