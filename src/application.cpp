@@ -40,7 +40,7 @@ bool Application::initialize(const std::string& configPath) {
                 std::filesystem::perms::group_read |
                 std::filesystem::perms::others_read);
         }
-
+        
         std::string logPath = std::filesystem::absolute(logsDir / "resource_usage.csv").string();
         ResourceMonitor::getInstance().startMonitoring(logPath, 30);
 
@@ -55,6 +55,11 @@ bool Application::initialize(const std::string& configPath) {
         
         // Initialize MAVLink if enabled
         if (!initializeMAVLink()) return false;  
+
+        // Pass MAVLink instance to NavigationUnit
+        if (m_mavlink) {
+            m_navigationUnit.setMavlink(m_mavlink.get());
+        }
 
         m_controlUnit.setDetectionMode(config_utils::getConfigInt(m_config, "detection.mode"));
         m_controlUnit.setDetectionInterval(config_utils::getConfigInt(m_config, "detection.interval"));
@@ -215,10 +220,11 @@ bool Application::initializeTracker() {
     trackerConfig.siamfcFeatureModelPath = config_utils::getConfigString(m_config, "detection_model.siamfc_feature_model_path");
     trackerConfig.siamfcTrackingModelPath = config_utils::getConfigString(m_config, "detection_model.siamfc_tracking_model_path");
 
-    m_tracker = TrackerManager::createTracker(trackerConfig);
-    if (!m_tracker) {
+    auto tracker = TrackerManager::createTracker(trackerConfig);
+    if (!tracker) {
         throw std::runtime_error("Failed to initialize tracker");
     }
+    m_trackerManager.initialize(std::move(tracker), m_showTrackingPath);
     std::cout << "Tracker initialized successfully" << std::endl;
     return true;
 }
@@ -248,11 +254,6 @@ tracking thread
 */
 void Application::run() {
     std::cout << "=== System Ready - Processing Started ===" << std::endl;
-
-    // ✅ FIX: Only initialize tracker in Mode 0
-    if (m_operationMode == 0) {
-        m_controlUnit.initializeTracker(std::move(m_tracker), m_showTrackingPath);
-    }
 
     std::thread yoloThread(&Application::modelsThread, this);
 
@@ -309,57 +310,18 @@ void Application::trackingThread() {
 
         // Handle tracker initialization/re-initialization
         if (m_controlUnit.hasNewDetection()) {
-            // Only initialize tracker if:
-            // 1. No tracker is currently running, OR
-            // 2. Tracker has failed and needs re-initialization
-            if (!m_controlUnit.isTracking() || m_controlUnit.hasTrackerFailed()) {
+            if (!m_trackerManager.isTracking() || m_controlUnit.hasTrackerFailed()) {
                 cv::Rect newBox;
                 cv::Mat newFrame;
                 int newClassId;
                 m_controlUnit.getDetectionData(newBox, newFrame, newClassId);
 
-                // Start tracking with the selected detection
-                m_controlUnit.startTracking(newFrame, newBox, newClassId, m_modelManager.getClassNames());
-                m_controlUnit.markDetectionAsProcessed();
-                
-            // 🚁 MAVLink Integration: Send manual control commands only in ALT_HOLD mode
-            if (m_mavlink && m_mavlinkEnabled) {
-                if (m_mavlink->isConnected()) {
-                    uint32_t currentMode = m_mavlink->getCurrentFlightMode();
-                    
-                    // Only send manual control commands when in ALT_HOLD mode (custom_mode = 2)
-                //    if (currentMode == 2) {
-                        // Send RC override command with varying values to test servo motor output
-                        std::cout << "🔄 Sending ARM command..." << std::endl;
-                        
-                        // Send ARM command
-                        // Parameters: arm=true, force=false (no forcing)
-                        bool armResult = m_mavlink->armDisarm(true, false);
-                        
-                        if (!armResult) {
-                            std::cerr << "❌ Failed to send ARM command" << std::endl;
-                        } else {
-                            std::cout << "✅ ARM command sent successfully" << std::endl;
-                            uint16_t rc_channels[18] = {0};
-                            rc_channels[2] = 1600; // Channel 3 (Throttle)
-                            bool rcResult = m_mavlink->sendRCOverride(rc_channels);
-                            if (!rcResult) {
-                                std::cerr << "❌ Failed to send RC override command" << std::endl;
-                            } else {
-                                std::cout << "✅ RC override command sent successfully" << std::endl;
-                            }
-                        }
-                //    } else {
-                //        std::cout << "⏸️  RC override skipped - Current mode: " << currentMode
-                //                  << " (ALT_HOLD required: 2)" << std::endl;
-                //    }
-                } else {
-                    std::cerr << "⚠️  MAVLink not connected - cannot send RC override" << std::endl;
+                if (m_trackerManager.start(newFrame, newBox, newClassId, m_modelManager.getClassNames())) {
+                    m_controlUnit.setIsTracking(true);
+                    m_controlUnit.setTrackerFailed(false);
+                    m_controlUnit.markDetectionAsProcessed();
                 }
-            }
             } else {
-                // Tracker is already running successfully, ignore new detections
-                // std::cout << "Tracker already running - ignoring new detection" << std::endl;
                 m_controlUnit.markDetectionAsProcessed();
             }
         }
@@ -371,8 +333,26 @@ void Application::trackingThread() {
         cv::Mat frame = frameData.image;
         if (frame.empty()) continue;
 
-        if (m_controlUnit.isTracking()) {
-            m_controlUnit.updateTracker(frame);
+        if (m_trackerManager.isTracking()) {
+            m_trackerManager.update(frame);
+
+            // Check if vehicle is armed from heartbeat and arm if necessary
+            if (m_mavlink && m_mavlinkEnabled) {
+                if (!m_mavlink->isVehicleArmed()) {
+                    m_navigationUnit.armVehicle(true);
+                }
+            }
+            
+            // Calculate navigation error and generate control commands
+            cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+            ControlOutputs controlOutputs = m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+
+
+            if (!m_trackerManager.isTracking()) {
+                m_controlUnit.setIsTracking(false);
+                m_controlUnit.setTrackerFailed(true, frame, m_trackerManager.getLastTrackBox());
+                std::cout << "Tracking lost - Re-enabling detection for re-initialization" << std::endl;
+            }
         }
 
         // Process incoming MAVLink messages
@@ -383,10 +363,11 @@ void Application::trackingThread() {
         // Visualization
         {
             std::lock_guard<std::mutex> lock(m_visMutex);
-            if (m_controlUnit.isTracking()) {
-                m_visualizer.visualizeTracking(frame, m_controlUnit.isTracking(), m_controlUnit.getLastTrackBox(),
-                                             m_controlUnit.getTrackedClassId(), m_modelManager.getClassNames(),
-                                             m_controlUnit.getTrackingPath());
+            if (m_trackerManager.isTracking()) {
+                const ControlOutputs& controlOutputs = m_navigationUnit.getLastControlOutputs();
+                m_visualizer.visualizeTracking(frame, m_trackerManager.isTracking(), m_trackerManager.getLastTrackBox(),
+                                             m_trackerManager.getTrackedClassId(), m_modelManager.getClassNames(),
+                                             m_trackerManager.getTrackingPath(), &controlOutputs);
             }
             m_visualizer.displayFrame(frame, "Tracking View");
         }

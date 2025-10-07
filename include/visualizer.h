@@ -1,6 +1,7 @@
 #pragma once
 
 #include "include/model.h"
+#include "include/navigation_unit.h" // For ControlOutputs
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <string>
@@ -17,7 +18,8 @@ public:
     // Tracking visualization
     void visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Rect& trackedBox, 
                            int trackedClassId, const std::vector<std::string>& classNames,
-                           const std::vector<cv::Point>& trackingPath);
+                           const std::vector<cv::Point>& trackingPath,
+                           const ControlOutputs* controlOutputs = nullptr);
 
     void displayFrame(const cv::Mat& frame, const std::string& windowName = "Live View");
 

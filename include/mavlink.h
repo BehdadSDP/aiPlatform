@@ -132,6 +132,13 @@ public:
     uint32_t getCurrentFlightMode() const { return current_flight_mode_; }
     
     /**
+     * @brief Get current armed status from received heartbeat
+     * 
+     * @return true if vehicle is armed, false otherwise
+     */
+    bool isVehicleArmed() const;
+    
+    /**
      * @brief Test MAVLink message format to verify proper encoding
      */
     void testMAVLinkMessageFormat();
@@ -170,6 +177,7 @@ private:
     
     // Flight mode tracking
     uint32_t current_flight_mode_;
+    uint8_t current_base_mode_;
     
     // === PRIVATE METHODS ===
     

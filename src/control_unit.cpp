@@ -170,120 +170,13 @@ void ControlUnit::markDetectionAsProcessed() {
     detection_.newDetection = false;
 }
 
-// Tracking management methods (moved from TrackerManager)
-void ControlUnit::initializeTracker(std::unique_ptr<TrackerInterface> tracker, bool showTrackingPath) {
-    tracker_ = std::move(tracker);
-    showTrackingPath_ = showTrackingPath;
-    isTracking_ = false;
-    trackedClassId_ = -1;
-    trackingPath_.clear();
+void ControlUnit::setIsTracking(bool isTracking) {
+    std::lock_guard<std::mutex> lock(detectionMutex_);
+    isTracking_ = isTracking;
 }
 
-bool ControlUnit::startTracking(const cv::Mat& frame, const cv::Rect& box, int classId, const std::vector<std::string>& classNames) {
-    try {
-        if (tracker_ && tracker_->init(frame, box)) {
-            isTracking_ = true;
-            lastTrackBox_ = box;
-            trackedClassId_ = classId;
-            trackingPath_.clear();
-            
-            // Only build tracking path if visualization is enabled
-            if (showTrackingPath_) {
-                trackingPath_.push_back(cv::Point(box.x + box.width / 2, box.y + box.height / 2));
-            }
-            
-            // Clear tracker failure flag and detection data since we successfully started tracking
-            {
-                std::lock_guard<std::mutex> lock(detectionMutex_);
-                trackerFailed_ = false;
-                // Clear detection to prevent repeated initialization attempts
-                detection_.valid = false;
-                detection_.newDetection = false;
-            }
-            
-            std::string className = (classId >= 0 && classId < static_cast<int>(classNames.size())) ?
-                                  classNames[classId] : "Unknown";
-            std::cout << "Tracking initialized: " << className << " [" << box.width << "x" << box.height << "]" << std::endl;
-            
-            // In detection mode 1, notify detection thread that it should stop running
-            if (detectionMode_ == 1) {
-                detectionCV_.notify_one();
-            }
-            
-            return true;
-        } else {
-            std::cerr << "Tracker initialization failed" << std::endl;
-            isTracking_ = false;
-            return false;
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Tracker initialization failed: " << e.what() << std::endl;
-        isTracking_ = false;
-        return false;
-    }
-}
-
-void ControlUnit::runTrackingLoop(std::atomic<bool>& running, ModelManager& modelManager) {
-    while (running) {
-        if (!waitForTrackingTurn()) {
-            continue;
-        }
-
-        FrameData frameData;
-        if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
-            continue;
-        }
-        cv::Mat frame = frameData.image;
-        if (frame.empty()) continue;
-
-        if (isTracking_) {
-            updateTracker(frame);
-        }
-    }
-}
-
-void ControlUnit::updateTracker(const cv::Mat& frame) {
-    try {
-        if (tracker_) {
-            cv::Rect newTrackBox = tracker_->update(frame);
-            
-            bool trackerValid = newTrackBox.width > 0 && newTrackBox.height > 0 && tracker_->isInitialized();
-            if (!trackerValid) {
-                isTracking_ = false;
-                trackingPath_.clear();
-                trackedClassId_ = -1;  // Reset class ID
-                
-                // Only set failure reference if we have a valid previous box
-                if (lastTrackBox_.width > 0 && lastTrackBox_.height > 0) {
-                    setTrackerFailed(true, frame, lastTrackBox_);
-                    std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ") - Re-enabling detection for re-initialization" << std::endl;
-                } else {
-                    setTrackerFailed(true);
-                    std::cout << "Tracking lost (confidence: " << tracker_->getLastConfidence() << ") - Re-enabling detection" << std::endl;
-                }
-                
-                // In detection mode 1, notify detection thread that it should resume
-                if (detectionMode_ == 1) {
-                    detectionCV_.notify_one();
-                }
-            } else {
-                lastTrackBox_ = newTrackBox;  // Update the last valid box
-                
-                // Only update tracking path if visualization is enabled
-                if (showTrackingPath_) {
-                    trackingPath_.push_back(cv::Point(lastTrackBox_.x + lastTrackBox_.width / 2, lastTrackBox_.y + lastTrackBox_.height / 2));
-                    if (trackingPath_.size() > MAX_PATH_POINTS) {
-                        trackingPath_.erase(trackingPath_.begin());
-                    }
-                }
-            }
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Tracker update failed: " << e.what() << std::endl;
-        isTracking_ = false;
-        trackingPath_.clear();
-        trackedClassId_ = -1;  // Reset class ID
-        setTrackerFailed(true);
-    }
+bool ControlUnit::isTracking() const {
+    std::lock_guard<std::mutex> lock(detectionMutex_);
+    return isTracking_;
 }
 

@@ -18,6 +18,7 @@ Mavlink::Mavlink(uint8_t system_id, uint8_t component_id)
     , baud_rate_(57600)
     , uart_initialized_(false)
     , current_flight_mode_(0)
+    , current_base_mode_(0)
 {
     std::cout << "Mavlink initialized with System ID: " << static_cast<int>(system_id_)
               << ", Component ID: " << static_cast<int>(component_id_) << std::endl;
@@ -130,9 +131,6 @@ void Mavlink::stop()
 
 bool Mavlink::armDisarm(bool arm, bool force)
 {
-    std::cout << (arm ? "Arming" : "Disarming") << " vehicle" 
-              << (force ? " (forced)" : "") << std::endl;
-    
     // Use correct force parameter for different autopilots
     float forceParam = 0.0f;
     if (force) {
@@ -149,7 +147,6 @@ bool Mavlink::armDisarm(bool arm, bool force)
     );
     
     if (result) {
-        std::cout << "✅ ARM/DISARM command sent successfully" << std::endl;
         // Add a small delay to allow for command processing
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     } else {
@@ -286,11 +283,7 @@ bool Mavlink::sendRCOverride(const uint16_t channels[18])
     
     bool result = sendMessageImmediate(msg);
     
-    if (result) {
-        std::cout << "✅ Sent RC override - Roll:" << channels[0] 
-                  << " Pitch:" << channels[1] << " Throttle:" << channels[2] 
-                  << " Yaw:" << channels[3] << std::endl;
-    } else {
+    if (!result) {
         std::cerr << "❌ Failed to send RC override command" << std::endl;
     }
     
@@ -315,20 +308,9 @@ bool Mavlink::sendMessageImmediate(const mavlink_message_t& msg)
     uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
     uint16_t length = mavlink_msg_to_send_buffer(buffer, &msg_copy);
     
-    // Debug: Print the first few bytes to check message format
+    // Check if message starts with correct magic byte
     if (length > 0) {
-        std::cout << "MAVLink message debug - First 8 bytes: ";
-        for (int i = 0; i < std::min(8, (int)length); i++) {
-            printf("0x%02X ", buffer[i]);
-        }
-        std::cout << std::endl;
-        
-        // Check if message starts with correct magic byte
-        if (buffer[0] == MAVLINK_STX) {
-            std::cout << "✅ Message starts with correct MAVLink 2.0 magic byte (0xFD)" << std::endl;
-        } else if (buffer[0] == MAVLINK_STX_MAVLINK1) {
-            std::cout << "⚠️  Message uses MAVLink 1.0 magic byte (0xFE)" << std::endl;
-        } else {
+        if (buffer[0] != MAVLINK_STX && buffer[0] != MAVLINK_STX_MAVLINK1) {
             std::cerr << "❌ Message has invalid magic byte: 0x" << std::hex << (int)buffer[0] << std::dec << std::endl;
             std::cerr << "Expected: 0xFD (MAVLink 2.0) or 0xFE (MAVLink 1.0)" << std::endl;
             return false;
@@ -337,13 +319,6 @@ bool Mavlink::sendMessageImmediate(const mavlink_message_t& msg)
     
     // Send via UART
     bool result = sendUART(buffer, length);
-    
-    if (result) {
-        std::cout << "Sent MAVLink message ID: " << msg.msgid 
-                  << ", Length: " << length << " bytes" << std::endl;
-    } else {
-        std::cerr << "Failed to send MAVLink message ID: " << msg.msgid << std::endl;
-    }
     
     return result;
 }
@@ -417,14 +392,6 @@ bool Mavlink::sendUART(const uint8_t* buffer, uint16_t length)
         return false;
     }
     
-    // Debug: Print what we're about to send
-    std::cout << "Sending to UART (" << length << " bytes): ";
-    for (int i = 0; i < std::min(8, (int)length); i++) {
-        printf("0x%02X ", buffer[i]);
-    }
-    if (length > 8) std::cout << "...";
-    std::cout << std::endl;
-    
     ssize_t bytes_written = write(serial_fd_, buffer, length);
     if (bytes_written < 0) {
         std::cerr << "ERROR: Failed to write to UART: " << strerror(errno) 
@@ -494,8 +461,6 @@ bool Mavlink::sendCommandLong(uint16_t command, float param1, float param2,
 
 void Mavlink::testMAVLinkMessageFormat()
 {
-    std::cout << "🧪 Testing MAVLink message format..." << std::endl;
-    
     // Test ARM command
     mavlink_message_t arm_msg;
     memset(&arm_msg, 0, sizeof(arm_msg)); // Initialize to prevent garbage data
@@ -515,24 +480,10 @@ void Mavlink::testMAVLinkMessageFormat()
     uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
     uint16_t arm_length = mavlink_msg_to_send_buffer(buffer, &arm_msg);
     
-    std::cout << "Test ARM command message:" << std::endl;
-    std::cout << "  Length: " << arm_length << " bytes" << std::endl;
-    std::cout << "  First 16 bytes: ";
-    for (int i = 0; i < std::min(16, (int)arm_length); i++) {
-        printf("0x%02X ", buffer[i]);
+    // Verify message format
+    if (buffer[0] != MAVLINK_STX && buffer[0] != MAVLINK_STX_MAVLINK1) {
+        std::cerr << "❌ Invalid magic byte detected in test message" << std::endl;
     }
-    std::cout << std::endl;
-    
-    // Check magic byte
-    if (buffer[0] == MAVLINK_STX) {
-        std::cout << "  ✅ Correct MAVLink 2.0 magic byte (0xFD)" << std::endl;
-    } else if (buffer[0] == MAVLINK_STX_MAVLINK1) {
-        std::cout << "  ⚠️  MAVLink 1.0 magic byte (0xFE)" << std::endl;
-    } else {
-        std::cout << "  ❌ Invalid magic byte: 0x" << std::hex << (int)buffer[0] << std::dec << std::endl;
-    }
-    
-    std::cout << "🧪 MAVLink message format test completed" << std::endl;
 }
 
 bool Mavlink::processIncomingMessages()
@@ -579,17 +530,12 @@ void Mavlink::handleReceivedMessage(const mavlink_message_t& msg)
             mavlink_heartbeat_t heartbeat;
             mavlink_msg_heartbeat_decode(&msg, &heartbeat);
             
-            // Update current flight mode
+            // Update current flight mode and base mode
             current_flight_mode_ = heartbeat.custom_mode;
+            current_base_mode_ = heartbeat.base_mode;
             
-            std::cout << "💓 HEARTBEAT received from System " << static_cast<int>(msg.sysid) 
-                      << ", Component " << static_cast<int>(msg.compid) << std::endl;
-            std::cout << "   Type: " << static_cast<int>(heartbeat.type) 
-                      << ", Autopilot: " << static_cast<int>(heartbeat.autopilot) << std::endl;
-            std::cout << "   Base Mode: 0x" << std::hex << static_cast<int>(heartbeat.base_mode) 
+            std::cout << "Base Mode: 0x" << std::hex << static_cast<int>(heartbeat.base_mode) 
                       << ", Custom Mode: " << std::dec << heartbeat.custom_mode << std::endl;
-            std::cout << "   System Status: " << static_cast<int>(heartbeat.system_status) 
-                      << ", MAVLink Version: " << static_cast<int>(heartbeat.mavlink_version) << std::endl;
             break;
         }
         
@@ -617,4 +563,11 @@ void Mavlink::handleReceivedMessage(const mavlink_message_t& msg)
                       << ", Component " << static_cast<int>(msg.compid) << std::endl;
             break;
     }
+}
+
+bool Mavlink::isVehicleArmed() const {
+    // Check if the MAV_MODE_FLAG_SAFETY_ARMED bit is set in base_mode
+    // Base mode bit flags are defined in MAVLink common protocol
+    const uint8_t MAV_MODE_FLAG_SAFETY_ARMED = 128; // 0x80
+    return (current_base_mode_ & MAV_MODE_FLAG_SAFETY_ARMED) != 0;
 }

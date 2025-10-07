@@ -272,14 +272,6 @@ void CameraHandler::stopStreaming() {
 }
 
 void CameraHandler::requestComplete(Request* request) {
-    static int totalFrames = 0;
-    totalFrames++;
-    
-    // Debug: Print every 100 frames to ensure this function is being called
-    if (totalFrames % 100 == 0) {
-        std::cout << "DEBUG: Processed " << totalFrames << " frames total" << std::endl;
-    }
-    
     if (!request) {
         std::cerr << "Null request received" << std::endl;
         return;

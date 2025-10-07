@@ -5,10 +5,11 @@
 #include "include/video_handler.h"
 #include "include/model_manager.h"
 #include "include/control_unit.h"
-#include "include/tracker_interface.h"
+#include "include/tracker_manager.h"
 #include "include/visualizer.h"
 #include "include/failure_handler.h"
 #include "include/mavlink.h"
+#include "include/navigation_unit.h"
 #include <atomic>
 #include <memory>
 #include <string>
@@ -42,6 +43,8 @@ private:
     static std::atomic<bool> m_running;
     ControlUnit m_controlUnit;
     ModelManager m_modelManager;
+    TrackerManager m_trackerManager;
+    NavigationUnit m_navigationUnit;
     Visualizer m_visualizer;
     DetectionFailure m_detectionFailure;
     std::mutex m_visMutex;
@@ -49,7 +52,6 @@ private:
     std::map<std::string, std::string> m_config;
     std::unique_ptr<CameraHandler> m_cameraHandler;
     std::unique_ptr<VideoHandler> m_videoHandler;
-    std::unique_ptr<TrackerInterface> m_tracker;
     std::unique_ptr<Mavlink> m_mavlink;
 
     int m_operationMode;

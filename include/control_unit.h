@@ -40,18 +40,10 @@ public:
     void clearDetection();
     void getDetectionData(cv::Rect& box, cv::Mat& frame, int& classId) const;
     void markDetectionAsProcessed();
-    
-    // Tracking management (moved from TrackerManager)
-    void initializeTracker(std::unique_ptr<TrackerInterface> tracker, bool showTrackingPath = true);
-    bool startTracking(const cv::Mat& frame, const cv::Rect& box, int classId, const std::vector<std::string>& classNames);
-    void runTrackingLoop(std::atomic<bool>& running, class ModelManager& modelManager);
-    void updateTracker(const cv::Mat& frame);
-    
-    // Tracking state access
-    bool isTracking() const { return isTracking_; }
-    cv::Rect getLastTrackBox() const { return lastTrackBox_; }
-    int getTrackedClassId() const { return trackedClassId_; }
-    const std::vector<cv::Point>& getTrackingPath() const { return trackingPath_; }
+
+    // Tracking state management
+    void setIsTracking(bool isTracking);
+    bool isTracking() const;
     
 private:
     // Detection mode
@@ -84,15 +76,7 @@ private:
     cv::Mat lastFailedFrame_;
     cv::Rect lastFailedBox_;
     mutable std::mutex detectionMutex_;
-    
-    // Tracking state (moved from TrackerManager)
-    std::unique_ptr<TrackerInterface> tracker_;
-    bool isTracking_ = false;
-    cv::Rect lastTrackBox_;
-    bool showTrackingPath_ = true;
-    int trackedClassId_ = -1;  // Store the class ID of tracked object
-    
-    // Variables for path tracking visualization
-    std::vector<cv::Point> trackingPath_;
-    static const int MAX_PATH_POINTS = 50;
+
+    // Tracking state
+    bool isTracking_{false};
 };

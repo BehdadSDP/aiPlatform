@@ -163,7 +163,6 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
     auto end_inference = std::chrono::high_resolution_clock::now();
 
     if (outs.empty() || outs[0].empty()) {
-        std::cout << "[DEBUG] No output or empty output from network!" << std::endl;
         return {};
     }
 

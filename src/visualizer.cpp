@@ -36,7 +36,8 @@ void Visualizer::visualizeDetections(cv::Mat& frame, const std::vector<model::De
 
 void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Rect& trackedBox, 
                                    int trackedClassId, const std::vector<std::string>& classNames,
-                                   const std::vector<cv::Point>& trackingPath) {
+                                   const std::vector<cv::Point>& trackingPath,
+                                   const ControlOutputs* controlOutputs) {
     if (frame.empty()) return;
 
     // Draw center point of camera frame
@@ -60,6 +61,25 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
         std::string label = "Tracking: " + className;
         cv::putText(frame, label, cv::Point(trackedBox.x, trackedBox.y - 10),
                    cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
+        
+        // Display control outputs if available
+        if (controlOutputs) {
+            std::string controlText = "Roll: " + std::to_string(controlOutputs->roll_output) + 
+                                    " Pitch: " + std::to_string(controlOutputs->pitch_output);
+            cv::putText(frame, controlText, cv::Point(10, 30),
+                       cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 0), 2);
+            
+            std::string errorText = "Filtered Error X: " + std::to_string(static_cast<int>(controlOutputs->error.x)) + 
+                                  " Y: " + std::to_string(static_cast<int>(controlOutputs->error.y));
+            cv::putText(frame, errorText, cv::Point(10, 60),
+                       cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 0), 2);
+            
+            // Display RC command status
+            std::string rcStatusText = controlOutputs->rc_commands_sent ? "RC Commands: ACTIVE" : "RC Commands: CENTERED (SUPPRESSED)";
+            cv::Scalar rcStatusColor = controlOutputs->rc_commands_sent ? cv::Scalar(0, 255, 255) : cv::Scalar(0, 255, 0); // Yellow for active, Green for suppressed
+            cv::putText(frame, rcStatusText, cv::Point(10, 90),
+                       cv::FONT_HERSHEY_SIMPLEX, 0.6, rcStatusColor, 2);
+        }
     }
 
     for (size_t i = 1; i < trackingPath.size(); ++i) {

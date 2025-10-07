@@ -91,7 +91,6 @@ int getConfigInt(const std::map<std::string, std::string>& config, const std::st
     }
     try {
         int value = std::stoi(it->second);
-        std::cout << "Config " << key << " = " << value << std::endl; // Optional: keep for debugging
         return value;
     } catch (const std::exception& e) {
         throw std::runtime_error("Invalid value for " + key + ": " + it->second);
@@ -105,7 +104,6 @@ float getConfigFloat(const std::map<std::string, std::string>& config, const std
     }
     try {
         float value = std::stof(it->second);
-        std::cout << "Config " << key << " = " << value << std::endl; // Optional: keep for debugging
         return value;
     } catch (const std::exception& e) {
         throw std::runtime_error("Invalid value for " + key + ": " + it->second);
@@ -117,7 +115,6 @@ std::string getConfigString(const std::map<std::string, std::string>& config, co
     if (it == config.end()) {
         throw std::runtime_error("Config key missing: " + key);
     }
-    std::cout << "Config " << key << " = " << it->second << std::endl; // Optional: keep for debugging
     return it->second; // No conversion needed for string
 }
 

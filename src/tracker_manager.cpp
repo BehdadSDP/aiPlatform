@@ -4,6 +4,8 @@
 #include <iostream>
 #include <stdexcept>
 
+TrackerManager::TrackerManager() : isTracking_(false), showTrackingPath_(true), trackedClassId_(-1) {}
+
 std::unique_ptr<TrackerInterface> TrackerManager::createTracker(const TrackerConfig& config) {
     switch (config.type) {
         case TrackerType::VIT_TRACKER:
@@ -19,5 +21,67 @@ std::unique_ptr<TrackerInterface> TrackerManager::createTracker(const TrackerCon
             
         default:
             throw std::runtime_error("Unknown tracker type");
+    }
+}
+
+void TrackerManager::initialize(std::unique_ptr<TrackerInterface> tracker, bool showTrackingPath) {
+    tracker_ = std::move(tracker);
+    showTrackingPath_ = showTrackingPath;
+    isTracking_ = false;
+    trackedClassId_ = -1;
+    trackingPath_.clear();
+}
+
+bool TrackerManager::start(const cv::Mat& frame, const cv::Rect& box, int classId, const std::vector<std::string>& classNames) {
+    try {
+        if (tracker_ && tracker_->init(frame, box)) {
+            isTracking_ = true;
+            lastTrackBox_ = box;
+            trackedClassId_ = classId;
+            trackingPath_.clear();
+            
+            if (showTrackingPath_) {
+                trackingPath_.push_back(cv::Point(box.x + box.width / 2, box.y + box.height / 2));
+            }
+            
+            return true;
+        } else {
+            std::cerr << "Tracker initialization failed" << std::endl;
+            isTracking_ = false;
+            return false;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Tracker initialization failed: " << e.what() << std::endl;
+        isTracking_ = false;
+        return false;
+    }
+}
+
+void TrackerManager::update(const cv::Mat& frame) {
+    try {
+        if (tracker_) {
+            cv::Rect newTrackBox = tracker_->update(frame);
+            
+            bool trackerValid = newTrackBox.width > 0 && newTrackBox.height > 0 && tracker_->isInitialized();
+            if (!trackerValid) {
+                isTracking_ = false;
+                trackingPath_.clear();
+                trackedClassId_ = -1;
+            } else {
+                lastTrackBox_ = newTrackBox;
+                
+                if (showTrackingPath_) {
+                    trackingPath_.push_back(cv::Point(lastTrackBox_.x + lastTrackBox_.width / 2, lastTrackBox_.y + lastTrackBox_.height / 2));
+                    if (trackingPath_.size() > MAX_PATH_POINTS) {
+                        trackingPath_.erase(trackingPath_.begin());
+                    }
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Tracker update failed: " << e.what() << std::endl;
+        isTracking_ = false;
+        trackingPath_.clear();
+        trackedClassId_ = -1;
     }
 } 

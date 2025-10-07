@@ -68,5 +68,25 @@
         "cstring": "cpp",
         "filesystem": "cpp"
     },
-    "kiroAgent.configureMCP": "Disabled"
+    "kiroAgent.configureMCP": "Disabled",
+    "workbench.colorCustomizations": {
+        "activityBar.activeBackground": "#43519f",
+        "activityBar.background": "#43519f",
+        "activityBar.foreground": "#e7e7e7",
+        "activityBar.inactiveForeground": "#e7e7e799",
+        "activityBarBadge.background": "#431c22",
+        "activityBarBadge.foreground": "#e7e7e7",
+        "commandCenter.border": "#e7e7e799",
+        "sash.hoverBorder": "#43519f",
+        "statusBar.background": "#343f7b",
+        "statusBar.foreground": "#e7e7e7",
+        "statusBarItem.hoverBackground": "#43519f",
+        "statusBarItem.remoteBackground": "#343f7b",
+        "statusBarItem.remoteForeground": "#e7e7e7",
+        "titleBar.activeBackground": "#343f7b",
+        "titleBar.activeForeground": "#e7e7e7",
+        "titleBar.inactiveBackground": "#343f7b99",
+        "titleBar.inactiveForeground": "#e7e7e799"
+    },
+    "peacock.color": "#343f7b"
 }

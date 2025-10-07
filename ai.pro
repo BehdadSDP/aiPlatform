@@ -33,6 +33,7 @@ SOURCES += \
     src/detection_manager.cpp \
     src/detection/yolo_detector.cpp \
     src/mavlink.cpp \
+    src/navigation_unit.cpp \
 
 # Add libcamera and dependencies
 LIBS += -L/usr/lib -lcamera-base -lpisp -lcamera
@@ -86,3 +87,4 @@ HEADERS += \
     include/detection/yolo_detector.h \
     include/frame_pool.h \
     include/mavlink.h \
+    include/navigation_unit.h \
