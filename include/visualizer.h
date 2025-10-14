@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <mutex>
 
 class Visualizer {
 public:
@@ -22,6 +23,10 @@ public:
                            const ControlOutputs* controlOutputs = nullptr);
 
     void displayFrame(const cv::Mat& frame, const std::string& windowName = "Live View");
+    
+    // Combined visualization - shows detection and tracking side by side
+    void displayCombinedView(const cv::Mat& detectionFrame, const cv::Mat& trackingFrame, 
+                           const std::string& windowName = "Detection & Tracking");
 
 private:
     void setupWindow(const std::string& windowName);
@@ -29,4 +34,17 @@ private:
     std::string getStatusText(const std::string& className);
     
     std::map<std::string, bool> m_windows;
+    
+    // Frame storage for combined view
+    cv::Mat m_detectionFrame;
+    cv::Mat m_trackingFrame;
+    std::mutex m_frameMutex;
+    bool m_enableCombinedView;
+
+public:
+    // Combined view control
+    void enableCombinedView(bool enable = true) { m_enableCombinedView = enable; }
+    void updateDetectionFrame(const cv::Mat& frame);
+    void updateTrackingFrame(const cv::Mat& frame);
+    void showCombinedView();
 }; 

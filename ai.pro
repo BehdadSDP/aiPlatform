@@ -32,6 +32,7 @@ SOURCES += \
     src/tracker_manager.cpp \
     src/detection_manager.cpp \
     src/detection/yolo_detector.cpp \
+    src/detection/color_detector.cpp \
     src/mavlink.cpp \
     src/navigation_unit.cpp \
 

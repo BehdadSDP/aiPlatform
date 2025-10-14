@@ -8,8 +8,8 @@ video_path=/home/pi5/shared_folder/aiPlatform/test/test_road.mp4
 # Camera settings (used when input_type=0)
 [camera]
 resolution_index=4
-width=640
-height=640
+width=1920
+height=1080
 frame_rate=20
 # Rotation angle: 0=no rotation, 90=90°, 180=180°, 270=270°
 rotation_angle=0
@@ -42,7 +42,7 @@ tracker_type= 0
 # Visualization settings
 [visualization]
 # Enable path tracing: 0=disabled, 1=enabled
-show_tracking_path=0
+show_tracking_path=1
 # Maximum path points to store (default: 50)
 max_path_points=50
 
@@ -78,8 +78,8 @@ heartbeat_interval=1000
 
 # Detection model configuration
 [detection_model]
-# Model type: 0=vehicle detection, 1=helmet detection, 2=face detection
-model_type=2
+# Model type: 0=vehicle detection, 1=helmet detection, 2=face detection, 3=color detection
+model_type=3
 
 #model paths
 yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov8-vehicle.onnx
@@ -98,4 +98,11 @@ vittracker_model_path=/home/pi5/shared_folder/aiPlatform/models/vittracker.onnx
 siamfc_feature_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracker_feature.onnx
 siamfc_tracking_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_tracking.onnx
 
-
+# Color detection configuration (used when model_type=3)
+[color_detection]
+# Comma-separated list of colors to detect: red, blue, green, yellow, orange, purple
+target_colors=blue
+# Minimum contour area to detect (pixels squared)
+min_area=500
+# Maximum contour area to detect (pixels squared)
+max_area=50000

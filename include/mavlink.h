@@ -157,7 +157,7 @@ public:
      */
     void handleReceivedMessage(const mavlink_message_t& msg);
     
-
+    uint32_t current_flight_mode_;
 private:
     // === CORE VARIABLES ===
     std::mutex uart_mutex_;
@@ -176,7 +176,7 @@ private:
     bool uart_initialized_;
     
     // Flight mode tracking
-    uint32_t current_flight_mode_;
+
     uint8_t current_base_mode_;
     
     // === PRIVATE METHODS ===

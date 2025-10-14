@@ -5,6 +5,7 @@
 #include "include/detection_manager.h"
 #include "include/frame_buffer_manager.h"
 #include <iostream>
+#include <sstream>
 #include <csignal>
 #include <thread>
 #include <filesystem>
@@ -188,6 +189,24 @@ bool Application::initializeModels() {
     } else if (modelType == 2) {
         modelConfig.modelPath = config_utils::getConfigString(m_config, "detection_model.face_model_path");
         modelConfig.classNamesPath = config_utils::getConfigString(m_config, "detection_model.face_names_path");
+    } else if (modelType == 3) {
+        // Color detection configuration
+        std::string colorsStr = config_utils::getConfigString(m_config, "color_detection.target_colors");
+        
+        // Parse comma-separated colors
+        std::stringstream ss(colorsStr);
+        std::string color;
+        while (std::getline(ss, color, ',')) {
+            // Trim whitespace
+            color.erase(0, color.find_first_not_of(" \t"));
+            color.erase(color.find_last_not_of(" \t") + 1);
+            if (!color.empty()) {
+                modelConfig.colorConfig.targetColors.push_back(color);
+            }
+        }
+        
+        modelConfig.colorConfig.minContourArea = config_utils::getConfigFloat(m_config, "color_detection.min_area");
+        modelConfig.colorConfig.maxContourArea = config_utils::getConfigFloat(m_config, "color_detection.max_area");
     } else {
         throw std::runtime_error("Invalid model type: " + std::to_string(modelType));
     }
@@ -254,6 +273,10 @@ tracking thread
 */
 void Application::run() {
     std::cout << "=== System Ready - Processing Started ===" << std::endl;
+    
+    // Enable combined view for detection and tracking
+    m_visualizer.enableCombinedView(true);
+    std::cout << "Combined Detection & Tracking view enabled" << std::endl;
 
     std::thread yoloThread(&Application::modelsThread, this);
 
@@ -303,6 +326,16 @@ draw safety overlays
 display frame
 */
 void Application::trackingThread() {
+    // Static frame counter outside the loop to persist between iterations
+    static int frameCounter = 0;
+    
+    // Ensure images directory exists
+    std::filesystem::path imagesDir("images");
+    if (!std::filesystem::exists(imagesDir)) {
+        std::filesystem::create_directories(imagesDir);
+        std::cout << "Created images directory for saving tracking frames" << std::endl;
+    }
+    
     while(m_running) {
         if (!m_controlUnit.waitForTrackingTurn()) {
             continue;
@@ -331,6 +364,7 @@ void Application::trackingThread() {
             continue;
         }
         cv::Mat frame = frameData.image;
+
         if (frame.empty()) continue;
 
         if (m_trackerManager.isTracking()) {
@@ -342,11 +376,11 @@ void Application::trackingThread() {
                     m_navigationUnit.armVehicle(true);
                 }
             }
-            
-            // Calculate navigation error and generate control commands
-            cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
-            ControlOutputs controlOutputs = m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
-
+            if (m_mavlink->current_flight_mode_ == 2){
+                // Calculate navigation error and generate control commands
+                cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+                ControlOutputs controlOutputs = m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+            }
 
             if (!m_trackerManager.isTracking()) {
                 m_controlUnit.setIsTracking(false);
@@ -368,8 +402,23 @@ void Application::trackingThread() {
                 m_visualizer.visualizeTracking(frame, m_trackerManager.isTracking(), m_trackerManager.getLastTrackBox(),
                                              m_trackerManager.getTrackedClassId(), m_modelManager.getClassNames(),
                                              m_trackerManager.getTrackingPath(), &controlOutputs);
+                
+                if(true){
+                    // Save the final visualized tracking frame to images folder (only when tracking)
+                    std::string filename = "/home/pi5/shared_folder/aiPlatform/images/tracking_frame_" + std::to_string(frameCounter++) + ".jpg";
+                    bool saved = cv::imwrite(filename, frame);
+                    if (saved) {
+                        std::cout << "Saved tracking frame: " << filename << std::endl;
+                    } else {
+                        std::cerr << "Failed to save tracking frame: " << filename << std::endl;
+                    }
+                }
+
             }
-            m_visualizer.displayFrame(frame, "Tracking View");
+            
+            // Update tracking frame for combined view only (no separate tracking window)
+            m_visualizer.updateTrackingFrame(frame);
+            m_visualizer.showCombinedView();
         }
     }
     cv::destroyAllWindows();

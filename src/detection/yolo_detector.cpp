@@ -5,8 +5,8 @@
 namespace ai {
 
 YoloDetector::YoloDetector()
-    : confidence_threshold_(0.5f)
-    , nms_threshold_(0.4f) {
+    : confidence_threshold_(0.3f)
+    , nms_threshold_(0.2f) {
 }
 
 bool YoloDetector::initialize(const std::string& model_path, const std::string& config_path) {

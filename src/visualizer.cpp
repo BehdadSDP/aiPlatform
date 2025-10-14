@@ -1,7 +1,9 @@
 #include "include/visualizer.h"
 #include <map>
 
-Visualizer::Visualizer() {}
+Visualizer::Visualizer() {
+    m_enableCombinedView = false;
+}
 
 void Visualizer::visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& detections, 
                                              const std::vector<std::string>& classNames) {
@@ -94,10 +96,57 @@ void Visualizer::displayFrame(const cv::Mat& frame, const std::string& windowNam
     cv::waitKey(1);
 }
 
+void Visualizer::displayCombinedView(const cv::Mat& detectionFrame, const cv::Mat& trackingFrame, 
+                                   const std::string& windowName) {
+    if (detectionFrame.empty() || trackingFrame.empty()) {
+        std::cerr << "Warning: One or both frames are empty for combined view" << std::endl;
+        return;
+    }
+    
+    // Ensure both frames have the same height for proper concatenation
+    cv::Mat resizedDetection, resizedTracking;
+    int targetHeight = std::min(detectionFrame.rows, trackingFrame.rows);
+    
+    // Resize detection frame maintaining aspect ratio
+    float detectionRatio = static_cast<float>(detectionFrame.cols) / detectionFrame.rows;
+    int detectionWidth = static_cast<int>(targetHeight * detectionRatio);
+    cv::resize(detectionFrame, resizedDetection, cv::Size(detectionWidth, targetHeight));
+    
+    // Resize tracking frame maintaining aspect ratio  
+    float trackingRatio = static_cast<float>(trackingFrame.cols) / trackingFrame.rows;
+    int trackingWidth = static_cast<int>(targetHeight * trackingRatio);
+    cv::resize(trackingFrame, resizedTracking, cv::Size(trackingWidth, targetHeight));
+    
+    // Create combined frame
+    cv::Mat combinedFrame;
+    cv::hconcat(resizedDetection, resizedTracking, combinedFrame);
+    
+    // Add labels to distinguish the views
+    cv::putText(combinedFrame, "DETECTION", cv::Point(10, 30),
+               cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 2);
+    cv::putText(combinedFrame, "TRACKING", cv::Point(detectionWidth + 10, 30),
+               cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 2);
+    
+    // Draw vertical separator line
+    cv::line(combinedFrame, cv::Point(detectionWidth, 0), 
+             cv::Point(detectionWidth, targetHeight), cv::Scalar(128, 128, 128), 2);
+    
+    setupWindow(windowName);
+    cv::imshow(windowName, combinedFrame);
+    cv::waitKey(1);
+}
+
 void Visualizer::setupWindow(const std::string& windowName) {
     if (m_windows.find(windowName) == m_windows.end()) {
         cv::namedWindow(windowName, cv::WINDOW_NORMAL);
-        cv::resizeWindow(windowName, 800, 600);
+        
+        // Set larger window size for combined view
+        if (windowName == "Detection & Tracking") {
+            cv::resizeWindow(windowName, 1600, 600);  // Wider for side-by-side
+        } else {
+            cv::resizeWindow(windowName, 800, 600);
+        }
+        
         m_windows[windowName] = true;
     }
 }
@@ -124,4 +173,54 @@ std::string Visualizer::getStatusText(const std::string& className) {
     } else {
         return "";
     }
+}
+
+void Visualizer::updateDetectionFrame(const cv::Mat& frame) {
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+    if (!frame.empty()) {
+        m_detectionFrame = frame.clone();
+    }
+}
+
+void Visualizer::updateTrackingFrame(const cv::Mat& frame) {
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+    if (!frame.empty()) {
+        m_trackingFrame = frame.clone();
+    }
+}
+
+void Visualizer::showCombinedView() {
+    if (!m_enableCombinedView) return;
+    
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+    
+    // Check if both frames are available
+    if (m_detectionFrame.empty() && m_trackingFrame.empty()) {
+        return; // No frames to display
+    }
+    
+    // Handle case where only one frame is available
+    cv::Mat detectionDisplay, trackingDisplay;
+    
+    if (m_detectionFrame.empty()) {
+        // Create placeholder for detection
+        detectionDisplay = cv::Mat::zeros(480, 640, CV_8UC3);
+        cv::putText(detectionDisplay, "DETECTION: Waiting for data...", 
+                   cv::Point(50, 240), cv::FONT_HERSHEY_SIMPLEX, 1.0, 
+                   cv::Scalar(128, 128, 128), 2);
+    } else {
+        detectionDisplay = m_detectionFrame.clone();
+    }
+    
+    if (m_trackingFrame.empty()) {
+        // Create placeholder for tracking
+        trackingDisplay = cv::Mat::zeros(480, 640, CV_8UC3);
+        cv::putText(trackingDisplay, "TRACKING: Waiting for data...", 
+                   cv::Point(50, 240), cv::FONT_HERSHEY_SIMPLEX, 1.0, 
+                   cv::Scalar(128, 128, 128), 2);
+    } else {
+        trackingDisplay = m_trackingFrame.clone();
+    }
+    
+    displayCombinedView(detectionDisplay, trackingDisplay);
 }

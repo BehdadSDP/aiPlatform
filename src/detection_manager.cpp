@@ -46,7 +46,9 @@ void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<
             }
         }
         
-        visualizer_.displayFrame(frame, "Detection View");
+        // Update detection frame for combined view only (no separate detection window)
+        visualizer_.updateDetectionFrame(frame);
+        visualizer_.showCombinedView();
         
         // Handle tracker failure recovery
         handleTrackerFailure(controlUnit);
@@ -96,8 +98,9 @@ void DetectionManager::processFrame(ModelManager& modelManager, ControlUnit& con
     // Visualize detections (draws on frame but doesn't display)
     visualizer_.visualizeDetections(frame, detections, classNames);
 
-    // Now display the complete frame with all overlays
-    visualizer_.displayFrame(frame);
+    // Update detection frame for combined view only (no separate detection window)
+    visualizer_.updateDetectionFrame(frame);
+    visualizer_.showCombinedView();
 
     // Process detections for tracking (merged functionality)
     processDetections(detections, frame, frameData.sequence, controlUnit, selectionStrategy);

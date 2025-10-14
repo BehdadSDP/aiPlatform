@@ -6,10 +6,14 @@
 #include <string>
 #include <vector>
 
+// Forward declarations
+class ColorDetector;
+
 enum class ModelType {
     COCO_GENERAL = 0,
     HELMET_DETECTION = 1,
-    FACE_DETECTION = 2
+    FACE_DETECTION = 2,
+    COLOR_DETECTION = 3
 };
 
 struct ModelConfig {
@@ -18,6 +22,13 @@ struct ModelConfig {
     std::string classNamesPath;
     std::vector<std::string> classNames;
     int targetClassId;
+    
+    // Color detection specific configuration
+    struct ColorDetectionConfig {
+        std::vector<std::string> targetColors;  // e.g., {"red", "blue", "green"}
+        double minContourArea = 500.0;
+        double maxContourArea = 50000.0;
+    } colorConfig;
 };
 
 class ModelManager {
@@ -44,12 +55,14 @@ public:
 
 private:
     std::unique_ptr<model> activeModel_;
+    std::unique_ptr<ColorDetector> colorDetector_;
     ModelConfig currentConfig_;
     bool initialized_;
     
     // Helper methods
     bool loadClassNames(const std::string& classNamesPath, std::vector<std::string>& classNames);
     int getHelmetTargetClassId() const; // Returns appropriate class ID for helmet detection
+    bool initializeColorDetection(const ModelConfig& config);
 };
 
 #endif // MODEL_MANAGER_H 
