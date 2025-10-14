@@ -58,6 +58,7 @@ private:
     bool m_showTrackingPath;
     int m_selectionStrategy;
     bool m_mavlinkEnabled;
+    std::string m_sessionFolder;  // Timestamped folder for current session
 };
 
 #endif // APPLICATION_H 

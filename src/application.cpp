@@ -10,6 +10,8 @@
 #include <thread>
 #include <filesystem>
 #include <opencv2/opencv.hpp>
+#include <chrono>
+#include <iomanip>
 
 std::atomic<bool> Application::m_running(true);
 Application::Application() : m_operationMode(0), m_showTrackingPath(false), m_selectionStrategy(0), m_mavlinkEnabled(false) {
@@ -149,11 +151,38 @@ bool Application::initializeInputSource() {
                                        config_utils::getConfigInt(m_config, "camera.height"));
         m_cameraHandler->setFrameRate(config_utils::getConfigFloat(m_config, "camera.frame_rate"));
         m_cameraHandler->setRotation(config_utils::getConfigInt(m_config, "camera.rotation_angle"));
+        
+        // Configure exposure settings
+        bool autoExposure = config_utils::getConfigInt(m_config, "camera.auto_exposure") == 1;
+        if (autoExposure) {
+            m_cameraHandler->setAutoExposure(true);
+        } else {
+            int exposureTimeUs = config_utils::getConfigInt(m_config, "camera.exposure_time_us");
+            m_cameraHandler->setExposureTime(exposureTimeUs);
+        }
+        
+        // Configure deblurring for drone vibration compensation
+        bool deblurEnabled = config_utils::getConfigInt(m_config, "camera.deblur_enabled") == 1;
+        if (deblurEnabled) {
+            m_cameraHandler->enableDeblur(true);
+            m_cameraHandler->setDeblurMethod(config_utils::getConfigInt(m_config, "camera.deblur_method"));
+            m_cameraHandler->setDeblurStrength(config_utils::getConfigFloat(m_config, "camera.deblur_strength"));
+        }
+        
         m_cameraHandler->startStreaming();
+        
         int rotationAngle = config_utils::getConfigInt(m_config, "camera.rotation_angle");
         std::cout << "Camera initialized: " << config_utils::getConfigInt(m_config, "camera.width") << "x" << config_utils::getConfigInt(m_config, "camera.height") << "@" << config_utils::getConfigFloat(m_config, "camera.frame_rate") << "fps";
         if (rotationAngle != 0) {
             std::cout << " (rotated " << rotationAngle << "°)";
+        }
+        if (autoExposure) {
+            std::cout << " [Auto-Exposure: ON]";
+        } else {
+            std::cout << " [Exposure: " << config_utils::getConfigInt(m_config, "camera.exposure_time_us") << "μs]";
+        }
+        if (deblurEnabled) {
+            std::cout << " [Deblur: ON]";
         }
         std::cout << std::endl;
     } else if (inputType == 1) {
@@ -329,11 +358,23 @@ void Application::trackingThread() {
     // Static frame counter outside the loop to persist between iterations
     static int frameCounter = 0;
     
-    // Ensure images directory exists
-    std::filesystem::path imagesDir("images");
-    if (!std::filesystem::exists(imagesDir)) {
-        std::filesystem::create_directories(imagesDir);
-        std::cout << "Created images directory for saving tracking frames" << std::endl;
+    // Create timestamped folder for this session
+    auto now = std::chrono::system_clock::now();
+    auto now_time_t = std::chrono::system_clock::to_time_t(now);
+    std::tm tm_buf;
+    localtime_r(&now_time_t, &tm_buf);
+    
+    std::ostringstream folderName;
+    folderName << "/home/pi5/shared_folder/aiPlatform/images/"
+               << std::put_time(&tm_buf, "%Y-%m-%d_%H-%M-%S");
+    
+    m_sessionFolder = folderName.str();
+    
+    // Ensure timestamped session directory exists
+    std::filesystem::path sessionDir(m_sessionFolder);
+    if (!std::filesystem::exists(sessionDir)) {
+        std::filesystem::create_directories(sessionDir);
+        std::cout << "Created session folder: " << m_sessionFolder << std::endl;
     }
     
     while(m_running) {
@@ -404,8 +445,8 @@ void Application::trackingThread() {
                                              m_trackerManager.getTrackingPath(), &controlOutputs);
                 
                 if(true){
-                    // Save the final visualized tracking frame to images folder (only when tracking)
-                    std::string filename = "/home/pi5/shared_folder/aiPlatform/images/tracking_frame_" + std::to_string(frameCounter++) + ".jpg";
+                    // Save the final visualized tracking frame to session folder (only when tracking)
+                    std::string filename = m_sessionFolder + "/tracking_frame_" + std::to_string(frameCounter++) + ".jpg";
                     bool saved = cv::imwrite(filename, frame);
                     if (saved) {
                         std::cout << "Saved tracking frame: " << filename << std::endl;

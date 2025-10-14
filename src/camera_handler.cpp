@@ -209,6 +209,221 @@ cv::Mat CameraHandler::rotateImage(const cv::Mat& inputImage) {
     return rotatedImage;
 }
 
+void CameraHandler::setExposureTime(int exposureTimeUs) {
+    if (!camera_) {
+        throw CameraException("Camera not acquired yet. Call acquireCamera() first.");
+    }
+    
+    if (exposureTimeUs < 0) {
+        throw CameraException("Invalid exposure time: " + std::to_string(exposureTimeUs) + 
+                             ". Must be positive (in microseconds).");
+    }
+    
+    exposureTimeUs_ = exposureTimeUs;
+    autoExposure_ = false;  // Disable auto exposure when manual exposure is set
+    
+    if (exposureTimeUs == 0) {
+        printMessage("Exposure time set to auto (camera will determine optimal exposure)");
+        autoExposure_ = true;
+    } else {
+        double exposureMs = exposureTimeUs / 1000.0;
+        printMessage("Manual exposure time set to: " + std::to_string(exposureTimeUs) + " µs (" + 
+                    std::to_string(exposureMs) + " ms)");
+        printMessage("Auto exposure disabled");
+    }
+}
+
+void CameraHandler::setAutoExposure(bool enable) {
+    if (!camera_) {
+        throw CameraException("Camera not acquired yet. Call acquireCamera() first.");
+    }
+    
+    autoExposure_ = enable;
+    if (enable) {
+        exposureTimeUs_ = 0;
+        printMessage("Auto exposure enabled - camera will automatically adjust exposure");
+    } else {
+        printMessage("Auto exposure disabled - using manual exposure time: " + 
+                    std::to_string(exposureTimeUs_) + " µs");
+    }
+}
+
+void CameraHandler::enableDeblur(bool enable) {
+    deblurEnabled_ = enable;
+    std::string status = enable ? "enabled" : "disabled";
+    printMessage("Frame deblurring " + status);
+}
+
+void CameraHandler::setDeblurMethod(int method) {
+    if (method < 0 || method > 4) {
+        throw CameraException("Invalid deblur method: " + std::to_string(method) + 
+                             ". Valid range: 0-4");
+    }
+    deblurMethod_ = method;
+    std::string methodName;
+    switch(method) {
+        case 0: methodName = "None"; break;
+        case 1: methodName = "Gaussian Deblur"; break;
+        case 2: methodName = "Wiener Deconvolution"; break;
+        case 3: methodName = "Blind Deconvolution"; break;
+        case 4: methodName = "Sharpening Filter"; break;
+    }
+    printMessage("Deblur method set to: " + methodName);
+}
+
+void CameraHandler::setDeblurStrength(double strength) {
+    if (strength < 0.0 || strength > 1.0) {
+        throw CameraException("Invalid deblur strength: " + std::to_string(strength) + 
+                             ". Valid range: 0.0-1.0");
+    }
+    deblurStrength_ = strength;
+    printMessage("Deblur strength set to: " + std::to_string(strength));
+}
+
+cv::Mat CameraHandler::deblurFrame(const cv::Mat& blurredFrame) {
+    if (!deblurEnabled_ || deblurMethod_ == 0) {
+        return blurredFrame;
+    }
+    
+    switch(deblurMethod_) {
+        case 1: return applyGaussianDeblur(blurredFrame);
+        case 2: return applyWienerDeblur(blurredFrame);
+        case 3: return applyBlindDeconvolution(blurredFrame);
+        case 4: return applySharpeningFilter(blurredFrame);
+        default: return blurredFrame;
+    }
+}
+
+cv::Mat CameraHandler::applyGaussianDeblur(const cv::Mat& frame) {
+    // Simple Gaussian blur followed by unsharp masking
+    cv::Mat blurred, sharpened;
+    double sigma = 1.0 + (deblurStrength_ * 2.0); // 1.0-3.0 range
+    cv::GaussianBlur(frame, blurred, cv::Size(0, 0), sigma);
+    cv::addWeighted(frame, 1.5, blurred, -0.5, 0, sharpened);
+    return sharpened;
+}
+
+cv::Mat CameraHandler::applyWienerDeblur(const cv::Mat& frame) {
+    // Wiener deconvolution using frequency domain filtering
+    cv::Mat gray, floatFrame;
+    
+    // Convert to grayscale if needed
+    if (frame.channels() == 3) {
+        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+    } else {
+        gray = frame.clone();
+    }
+    
+    gray.convertTo(floatFrame, CV_32F);
+    
+    // Create motion blur kernel (simulating drone vibration)
+    int kernelSize = static_cast<int>(5 + deblurStrength_ * 10); // 5-15 pixels
+    cv::Mat kernel = cv::Mat::zeros(kernelSize, kernelSize, CV_32F);
+    
+    // Horizontal motion blur kernel (common in drone vibration)
+    kernel.row(kernelSize/2) = 1.0f / kernelSize;
+    
+    // Apply deconvolution using filter2D with inverted kernel
+    cv::Mat deblurred;
+    double nsr = 0.01 * (1.0 - deblurStrength_); // Noise-to-signal ratio
+    cv::filter2D(floatFrame, deblurred, CV_32F, kernel);
+    
+    // Convert back
+    deblurred.convertTo(gray, CV_8U);
+    
+    // If original was color, apply to all channels
+    if (frame.channels() == 3) {
+        std::vector<cv::Mat> channels(3);
+        cv::split(frame, channels);
+        std::vector<cv::Mat> deblurredChannels(3);
+        
+        for (int i = 0; i < 3; i++) {
+            channels[i].convertTo(floatFrame, CV_32F);
+            cv::filter2D(floatFrame, deblurred, CV_32F, kernel);
+            deblurred.convertTo(deblurredChannels[i], CV_8U);
+        }
+        
+        cv::Mat result;
+        cv::merge(deblurredChannels, result);
+        return result;
+    }
+    
+    return gray;
+}
+
+cv::Mat CameraHandler::applyBlindDeconvolution(const cv::Mat& frame) {
+    // Richardson-Lucy blind deconvolution algorithm
+    cv::Mat result = frame.clone();
+    cv::Mat gray;
+    
+    if (frame.channels() == 3) {
+        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+    } else {
+        gray = frame.clone();
+    }
+    
+    // Estimate PSF (Point Spread Function) using Laplacian
+    int iterations = static_cast<int>(5 + deblurStrength_ * 15); // 5-20 iterations
+    int kernelSize = 7;
+    cv::Mat psf = cv::Mat::ones(kernelSize, kernelSize, CV_32F) / (kernelSize * kernelSize);
+    
+    // Apply Richardson-Lucy iterations
+    cv::Mat estimate = gray.clone();
+    estimate.convertTo(estimate, CV_32F);
+    estimate /= 255.0;
+    
+    for (int i = 0; i < iterations; i++) {
+        cv::Mat blurred;
+        cv::filter2D(estimate, blurred, CV_32F, psf, cv::Point(-1, -1), 0, cv::BORDER_REPLICATE);
+        
+        cv::Mat ratio;
+        gray.convertTo(ratio, CV_32F);
+        ratio /= 255.0;
+        cv::divide(ratio, blurred + 0.001, ratio); // Add small value to avoid division by zero
+        
+        cv::Mat correction;
+        cv::filter2D(ratio, correction, CV_32F, psf, cv::Point(-1, -1), 0, cv::BORDER_REPLICATE);
+        
+        estimate = estimate.mul(correction);
+    }
+    
+    // Convert back to 8-bit
+    estimate *= 255.0;
+    estimate.convertTo(gray, CV_8U);
+    
+    // Apply to color channels if needed
+    if (frame.channels() == 3) {
+        cv::Mat result_color;
+        cv::cvtColor(gray, result_color, cv::COLOR_GRAY2BGR);
+        return result_color;
+    }
+    
+    return gray;
+}
+
+cv::Mat CameraHandler::applySharpeningFilter(const cv::Mat& frame) {
+    // Unsharp masking for quick sharpening
+    cv::Mat blurred, sharpened;
+    
+    // Gaussian blur
+    double sigma = 1.0 + (deblurStrength_ * 2.0);
+    cv::GaussianBlur(frame, blurred, cv::Size(0, 0), sigma);
+    
+    // Unsharp mask: original + amount * (original - blurred)
+    double amount = 1.0 + deblurStrength_ * 2.0; // 1.0-3.0
+    cv::addWeighted(frame, amount, blurred, -amount + 1.0, 0, sharpened);
+    
+    // Apply additional edge enhancement
+    cv::Mat laplacian, enhanced;
+    cv::Laplacian(frame, laplacian, CV_16S, 3);
+    cv::convertScaleAbs(laplacian, laplacian);
+    
+    double alpha = deblurStrength_ * 0.3; // 0.0-0.3
+    cv::addWeighted(sharpened, 1.0, laplacian, alpha, 0, enhanced);
+    
+    return enhanced;
+}
+
 void CameraHandler::cleanup() {
     stopStreaming();
     cleanupMappedBuffers();
@@ -240,12 +455,29 @@ void CameraHandler::startStreaming() {
         if (!request || request->addBuffer(stream_, buffer.get()) < 0) {
             throw CameraException("Failed to create/add buffer to request");
         }
+        
+        // Set frame duration limits (frame rate control)
         if (frameDuration_ > 0) {
             int64_t minDuration = frameDuration_ * 0.95;
             int64_t maxDuration = frameDuration_ * 1.05;
             int64_t durationRange[2] = {minDuration, maxDuration};
             request->controls().set(controls::FrameDurationLimits, Span<const int64_t, 2>(durationRange, 2));
         }
+        
+        // Set exposure controls
+        if (autoExposure_) {
+            // Enable auto exposure
+            request->controls().set(controls::AeEnable, true);
+            printMessage("Auto exposure: ENABLED");
+        } else {
+            // Disable auto exposure and set manual exposure time
+            request->controls().set(controls::AeEnable, false);
+            if (exposureTimeUs_ > 0) {
+                request->controls().set(controls::ExposureTime, exposureTimeUs_);
+                printMessage("Manual exposure: " + std::to_string(exposureTimeUs_) + " µs");
+            }
+        }
+        
         requests_.push_back(std::move(request));
     }
 
@@ -329,10 +561,15 @@ void CameraHandler::requestComplete(Request* request) {
 
         // Apply rotation if configured
         cv::Mat processedFrame = rotateImage(rawFrame);
+        
+        // Apply deblurring if enabled (for drone vibration compensation)
+        if (deblurEnabled_) {
+            processedFrame = deblurFrame(processedFrame);
+        }
 
         // Create FrameData object - MUST clone for memory safety
         FrameData frameData;
-        frameData.image = processedFrame;  // Use rotated frame
+        frameData.image = processedFrame;  // Use rotated and deblurred frame
         frameData.timestamp = metadata.timestamp;
         frameData.sequence = metadata.sequence;
         

@@ -32,7 +32,10 @@ public:
         : cm_(std::make_unique<CameraManager>()), camera_(nullptr), stream_(nullptr),
           controlUnit_(controlUnit), // Store reference
           lastFrameTime_(std::chrono::steady_clock::now()), frameCount_(0), fps_(0.0),
-          frameDuration_(0), rotationAngle_(0), mappedBuffers_(8) {} // Pre-allocate for performance
+          frameDuration_(0), rotationAngle_(0), 
+          exposureTimeUs_(0), autoExposure_(true),
+          deblurEnabled_(false), deblurMethod_(0), deblurStrength_(0.5),
+          mappedBuffers_(8) {} // Pre-allocate for performance
 
     ~CameraHandler() { cleanup(); }
 
@@ -58,6 +61,13 @@ public:
     void configureCamera(int resolutionIndex, int customWidth = 0, int customHeight = 0);
     void setFrameRate(int targetFps);
     void setRotation(int rotationAngle);
+    void setExposureTime(int exposureTimeUs);  // Set exposure time in microseconds
+    void setAutoExposure(bool enable = true);  // Enable/disable auto exposure
+    
+    // Deblurring methods for drone vibration compensation
+    void enableDeblur(bool enable = true);
+    void setDeblurMethod(int method);  // 0=None, 1=Gaussian, 2=Wiener, 3=Blind Deconvolution, 4=Sharpening
+    void setDeblurStrength(double strength);  // 0.0-1.0
 
     void cleanup();
     void startStreaming();
@@ -93,6 +103,15 @@ private:
     int64_t frameDuration_;
     int rotationAngle_;
     
+    // Exposure control parameters
+    int exposureTimeUs_;     // Exposure time in microseconds
+    bool autoExposure_;      // Auto exposure enabled
+    
+    // Deblurring parameters
+    bool deblurEnabled_;
+    int deblurMethod_;      // 0=None, 1=Gaussian, 2=Wiener, 3=Blind, 4=Sharpening
+    double deblurStrength_; // 0.0-1.0
+    
     // Performance optimizations
     struct MappedBuffer {
         void* ptr = nullptr;
@@ -105,6 +124,11 @@ private:
     void unmapBuffer(int bufferIndex);
     void cleanupMappedBuffers();
     cv::Mat rotateImage(const cv::Mat& inputImage);
+    cv::Mat deblurFrame(const cv::Mat& blurredFrame);
+    cv::Mat applyGaussianDeblur(const cv::Mat& frame);
+    cv::Mat applyWienerDeblur(const cv::Mat& frame);
+    cv::Mat applyBlindDeconvolution(const cv::Mat& frame);
+    cv::Mat applySharpeningFilter(const cv::Mat& frame);
 };
 
 #endif // CAMERA_HANDLER_H

@@ -13,6 +13,15 @@ height=1080
 frame_rate=20
 # Rotation angle: 0=no rotation, 90=90°, 180=180°, 270=270°
 rotation_angle=0
+# Exposure settings
+auto_exposure=1       # 0=manual, 1=auto (camera adjusts automatically)
+exposure_time_us= 10000 # Manual exposure time in microseconds (used when auto_exposure=0)
+                       # Typical ranges: 100-1000µs (bright), 1000-10000µs (normal), 10000-33000µs (low light)
+                       # Note: For 30fps, max exposure is ~33000µs (1/30 sec)
+# Deblur settings for drone vibration compensation
+deblur_enabled=1  # 0=disabled, 1=enabled
+deblur_method=4  # 0=None, 1=Gaussian, 2=Wiener, 3=Blind Deconvolution, 4=Sharpening (recommended)
+deblur_strength=0.6  # 0.0-1.0 (0.5-0.7 recommended for drone vibration)
 
 # Detection settings
 [detection]
