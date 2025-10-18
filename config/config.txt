@@ -97,6 +97,13 @@ max_rc_change_rate=30
 # Lower values = more smoothing (0.1-0.2 for smooth)
 # Higher values = less smoothing/faster response (0.4-0.5 for responsive)
 filter_alpha=1
+# Centering tolerance radius in pixels (default: 50)
+# The radius of the circular zone around the tracked object center
+# When the frame center is within this radius, the object is considered centered
+# Lower values = tighter centering requirement (30-40 for precise)
+# Higher values = looser centering tolerance (60-100 for easier)
+# Typical range: 30-100
+centering_radius=150
 
 # Detection model configuration
 [detection_model]

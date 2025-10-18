@@ -22,7 +22,8 @@ public:
                            const std::vector<cv::Point>& trackingPath,
                            const ControlOutputs* controlOutputs = nullptr,
                            uint32_t flightMode = 0,
-                           bool mavlinkConnected = false);
+                           bool mavlinkConnected = false,
+                           float centeringRadius = 50.0f);
 
     void displayFrame(const cv::Mat& frame, const std::string& windowName = "Live View");
     

@@ -45,6 +45,15 @@ void NavigationUnit::setMaxRCChangeRate(float maxChangeRate) {
     m_maxRCChangeRate = std::clamp(maxChangeRate, 5.0f, 500.0f);
 }
 
+void NavigationUnit::setCenteringRadius(float radius) {
+    // Clamp to reasonable range (10-200 pixels)
+    m_centeringRadius = std::clamp(radius, 10.0f, 200.0f);
+}
+
+float NavigationUnit::getCenteringRadius() const {
+    return m_centeringRadius;
+}
+
 cv::Point2f NavigationUnit::applyLowPassFilter(const cv::Point2f& rawError) {
     if (m_firstFilterUpdate) {
         // For the first update, initialize the filter with the raw error
@@ -122,82 +131,6 @@ cv::Point2f NavigationUnit::calculateError(const cv::Rect& objectBox, int frameW
 
     return error;
 }
-
-/*ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error) {
-    ControlOutputs outputs;
-    
-    // Apply low-pass filter to smooth the error signal
-    cv::Point2f filteredError = applyLowPassFilter(error);
-    
-    // Store both raw and filtered error for debugging
-    outputs.error = filteredError;  // Use filtered error for control
-    
-    // Calculate delta time for PID controller
-    auto currentTime = std::chrono::steady_clock::now();
-    float deltaTime = 0.0f;
-    
-    if (!m_firstUpdate) {
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(currentTime - m_lastUpdateTime);
-        deltaTime = duration.count() / 1000000.0f; // Convert to seconds
-    }
-    
-    m_lastUpdateTime = currentTime;
-    
-    // Compute PID outputs using filtered error for roll and pitch
-    float rollPIDOutput = computePID(filteredError.x, m_rollKp, m_rollKi, m_rollKd, 
-                                     m_rollIntegral, m_rollPreviousError, deltaTime);
-    float pitchPIDOutput = computePID(filteredError.y, m_pitchKp, m_pitchKi, m_pitchKd,
-                                      m_pitchIntegral, m_pitchPreviousError, deltaTime);
-    
-    m_firstUpdate = false;
-    
-    // Convert PID outputs to RC commands (1000-2000)
-    const int neutral = 1527;
-    const int max_deviation = 100;  // Reduced from 200 to 100 for smoother response
-    
-    // Apply PID outputs to neutral position
-    int roll_output_desired = static_cast<int>(neutral + rollPIDOutput);
-    int pitch_output_desired = static_cast<int>(neutral + pitchPIDOutput);
-    
-    // Clamp the desired values to a safe range
-    roll_output_desired = std::clamp(roll_output_desired, neutral - max_deviation, neutral + max_deviation);
-    pitch_output_desired = std::clamp(pitch_output_desired, neutral - max_deviation, neutral + max_deviation);
-
-    // Apply slew rate limiting for smooth transitions
-    int roll_output = applySlewRateLimit(roll_output_desired, m_previousRollOutput, deltaTime);
-    int pitch_output = applySlewRateLimit(pitch_output_desired, m_previousPitchOutput, deltaTime);
-    
-    // Update previous outputs for next iteration
-    m_previousRollOutput = roll_output;
-    m_previousPitchOutput = pitch_output;
-    m_firstOutputUpdate = false;
-
-    // Store outputs for debugging
-    outputs.roll_output = roll_output;
-    outputs.pitch_output = pitch_output;
-    outputs.rc_commands_sent = true;  // Default behavior - always send commands
-    m_lastOutputs = outputs;
-
-    // Send RC override command only if MAVLink is available
-    if (m_mavlink) {
-        // Create the RC override command
-        uint16_t channels[18] = {0};
-        //channels[0] = roll_output;    // Roll
-        channels[1] = pitch_output;   // Pitch
-
-        // Set remaining channels to "ignore"
-        for (int i = 2; i < 18; ++i) {
-            channels[i] = UINT16_MAX;
-        }
-        channels[0] = UINT16_MAX;
-        // Send the command
-        bool success = m_mavlink->sendRCOverride(channels);
-    } else {
-        std::cerr << "ERROR: NavigationUnit: MAVLink system not set, cannot send RC override" << std::endl;
-    }
-    
-    return outputs;
-}*/
 
 ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error, const cv::Rect& objectBox, int frameWidth, int frameHeight) {
     ControlOutputs outputs;
@@ -289,14 +222,21 @@ ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error,
 
 bool NavigationUnit::isFrameCenterInBoundingBox(const cv::Rect& objectBox, int frameWidth, int frameHeight) {
     // Calculate the center point of the frame
-    cv::Point2f frameCenter(frameWidth / 2.0f, frameHeight / 2.0f);
+    cv::Point2f frameCenter(frameWidth / 2.0f, 2.0f * (frameHeight / 3.0f));
     
-    // Check if the frame center point is inside the bounding box
-    //bool insideX = (frameCenter.x >= objectBox.x) && (frameCenter.x <= (objectBox.x + objectBox.width));
-    bool insideY = (frameCenter.y >= objectBox.y) && (frameCenter.y <= (objectBox.y + objectBox.height));
-    bool insideX = true;
-    return insideX && insideY;
+    // Calculate the center of the tracked object's bounding box
+    cv::Point2f objectCenter(objectBox.x + objectBox.width / 2.0f, 
+                             objectBox.y + objectBox.height / 2.0f);
+    
+    // Calculate distance between frame center and object center
+    float dx = frameCenter.x - objectCenter.x;
+    float dy = frameCenter.y - objectCenter.y;
+    float distance = std::sqrt(dx * dx + dy * dy);
+    
+    // Check if frame center is within the circular tolerance zone
+    return distance <= m_centeringRadius;
 }
+
 
 bool NavigationUnit::armVehicle(bool arm, bool force) {
     if (!m_mavlink) {

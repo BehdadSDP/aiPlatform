@@ -112,6 +112,19 @@ public:
      */
     void setMaxRCChangeRate(float maxChangeRate);
 
+    /**
+     * @brief Sets the centering tolerance radius for object tracking.
+     * @param radius The radius in pixels for the circular tolerance zone around the object center.
+     *               When the frame center is within this radius, the object is considered centered.
+     */
+    void setCenteringRadius(float radius);
+
+    /**
+     * @brief Gets the current centering radius value.
+     * @return The centering radius in pixels.
+     */
+    float getCenteringRadius() const;
+
 private:
     Mavlink* m_mavlink = nullptr;
     
@@ -150,6 +163,9 @@ private:
     int m_previousRollOutput = 1500;   // Previous roll RC output
     int m_previousPitchOutput = 1500;  // Previous pitch RC output
     bool m_firstOutputUpdate = true;   // Flag for first output update
+    
+    // Centering tolerance
+    float m_centeringRadius = 50.0f;  // Radius in pixels for centering tolerance zone
     
     // Store last outputs for debugging
     ControlOutputs m_lastOutputs;

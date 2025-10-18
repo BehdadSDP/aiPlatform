@@ -41,7 +41,8 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
                                    const std::vector<cv::Point>& trackingPath,
                                    const ControlOutputs* controlOutputs,
                                    uint32_t flightMode,
-                                   bool mavlinkConnected) {
+                                   bool mavlinkConnected,
+                                   float centeringRadius) {
     if (frame.empty()) return;
 
     // Draw center point of camera frame
@@ -56,6 +57,9 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
         cv::Point objectCenter(trackedBox.x + trackedBox.width / 2, trackedBox.y + trackedBox.height / 2);
         cv::circle(frame, objectCenter, 5, cv::Scalar(0, 255, 0), -1); // Green center point
         cv::circle(frame, objectCenter, 8, cv::Scalar(0, 0, 0), 2); // Black border
+        
+        // Draw tolerance circle around object center using the configured radius
+        cv::circle(frame, objectCenter, static_cast<int>(centeringRadius), cv::Scalar(255, 0, 255), 2); // Magenta circle
         
         // Draw line between frame center and object center
         cv::line(frame, frameCenter, objectCenter, cv::Scalar(255, 255, 0), 2); // Yellow line

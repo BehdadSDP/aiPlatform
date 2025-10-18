@@ -67,10 +67,13 @@ bool Application::initialize(const std::string& configPath) {
         // Configure navigation control parameters for smooth response
         float maxRCChangeRate = config_utils::getConfigFloat(m_config, "navigation.max_rc_change_rate");
         float filterAlpha = config_utils::getConfigFloat(m_config, "navigation.filter_alpha");
+        float centeringRadius = config_utils::getConfigFloat(m_config, "navigation.centering_radius");
         m_navigationUnit.setMaxRCChangeRate(maxRCChangeRate);
         m_navigationUnit.setFilterAlpha(filterAlpha);
+        m_navigationUnit.setCenteringRadius(centeringRadius);
         std::cout << "Navigation control configured: Slew rate=" << maxRCChangeRate 
-                  << " PWM/sec, Filter alpha=" << filterAlpha << std::endl;
+                  << " PWM/sec, Filter alpha=" << filterAlpha 
+                  << ", Centering radius=" << centeringRadius << "px" << std::endl;
 
         m_controlUnit.setDetectionMode(config_utils::getConfigInt(m_config, "detection.mode"));
         m_controlUnit.setDetectionInterval(config_utils::getConfigInt(m_config, "detection.interval"));
@@ -427,7 +430,7 @@ void Application::trackingThread() {
                     m_navigationUnit.armVehicle(true);
                 }
             }
-                // Calculate navigation error and generate control commands
+               // Calculate navigation error and generate control commands
                cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
                ControlOutputs controlOutputs = m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
 
@@ -461,7 +464,8 @@ void Application::trackingThread() {
                 
                 m_visualizer.visualizeTracking(frame, m_trackerManager.isTracking(), m_trackerManager.getLastTrackBox(),
                                              m_trackerManager.getTrackedClassId(), m_modelManager.getClassNames(),
-                                             m_trackerManager.getTrackingPath(), &controlOutputs, flightMode, mavlinkConnected);
+                                             m_trackerManager.getTrackingPath(), &controlOutputs, flightMode, mavlinkConnected,
+                                             m_navigationUnit.getCenteringRadius());
                 
                 if(true){
                     // Save the final visualized tracking frame to session folder (only when tracking)
