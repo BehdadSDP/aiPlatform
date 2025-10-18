@@ -63,6 +63,14 @@ bool Application::initialize(const std::string& configPath) {
         if (m_mavlink) {
             m_navigationUnit.setMavlink(m_mavlink.get());
         }
+        
+        // Configure navigation control parameters for smooth response
+        float maxRCChangeRate = config_utils::getConfigFloat(m_config, "navigation.max_rc_change_rate");
+        float filterAlpha = config_utils::getConfigFloat(m_config, "navigation.filter_alpha");
+        m_navigationUnit.setMaxRCChangeRate(maxRCChangeRate);
+        m_navigationUnit.setFilterAlpha(filterAlpha);
+        std::cout << "Navigation control configured: Slew rate=" << maxRCChangeRate 
+                  << " PWM/sec, Filter alpha=" << filterAlpha << std::endl;
 
         m_controlUnit.setDetectionMode(config_utils::getConfigInt(m_config, "detection.mode"));
         m_controlUnit.setDetectionInterval(config_utils::getConfigInt(m_config, "detection.interval"));
@@ -376,7 +384,7 @@ void Application::trackingThread() {
         std::filesystem::create_directories(sessionDir);
         std::cout << "Created session folder: " << m_sessionFolder << std::endl;
     }
-    
+    int control_test = true;
     while(m_running) {
         if (!m_controlUnit.waitForTrackingTurn()) {
             continue;
@@ -411,16 +419,18 @@ void Application::trackingThread() {
         if (m_trackerManager.isTracking()) {
             m_trackerManager.update(frame);
 
+
+            if (m_mavlink->current_flight_mode_ == 2){
             // Check if vehicle is armed from heartbeat and arm if necessary
             if (m_mavlink && m_mavlinkEnabled) {
                 if (!m_mavlink->isVehicleArmed()) {
                     m_navigationUnit.armVehicle(true);
                 }
             }
-            if (m_mavlink->current_flight_mode_ == 2){
                 // Calculate navigation error and generate control commands
-                cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
-                ControlOutputs controlOutputs = m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+               cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+               ControlOutputs controlOutputs = m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+
             }
 
             if (!m_trackerManager.isTracking()) {
@@ -440,9 +450,18 @@ void Application::trackingThread() {
             std::lock_guard<std::mutex> lock(m_visMutex);
             if (m_trackerManager.isTracking()) {
                 const ControlOutputs& controlOutputs = m_navigationUnit.getLastControlOutputs();
+                
+                // Get flight mode and MAVLink connection status
+                uint32_t flightMode = 0;
+                bool mavlinkConnected = false;
+                if (m_mavlink && m_mavlinkEnabled) {
+                    flightMode = m_mavlink->getCurrentFlightMode();
+                    mavlinkConnected = m_mavlink->isConnected();
+                }
+                
                 m_visualizer.visualizeTracking(frame, m_trackerManager.isTracking(), m_trackerManager.getLastTrackBox(),
                                              m_trackerManager.getTrackedClassId(), m_modelManager.getClassNames(),
-                                             m_trackerManager.getTrackingPath(), &controlOutputs);
+                                             m_trackerManager.getTrackingPath(), &controlOutputs, flightMode, mavlinkConnected);
                 
                 if(true){
                     // Save the final visualized tracking frame to session folder (only when tracking)

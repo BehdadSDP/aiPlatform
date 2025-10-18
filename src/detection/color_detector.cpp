@@ -86,6 +86,12 @@ std::vector<model::Detection> ColorDetector::createDetectionsFromMask(
 
         // Create detection
         model::Detection detection;
+        //bbox.width = (int)(bbox.width * 1.5);
+        //bbox.height = (int)(bbox.height * 1.5);
+        //bbox.x = (int)(bbox.x * 0.5);
+        //bbox.y = (int)(bbox.y * 0.5);
+        //cv::Rect bbox_(bbox.tl() * 2, bbox.br() * 2);
+
         detection.box = bbox;
         detection.classId = classId;
         

@@ -39,11 +39,13 @@ void Visualizer::visualizeDetections(cv::Mat& frame, const std::vector<model::De
 void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Rect& trackedBox, 
                                    int trackedClassId, const std::vector<std::string>& classNames,
                                    const std::vector<cv::Point>& trackingPath,
-                                   const ControlOutputs* controlOutputs) {
+                                   const ControlOutputs* controlOutputs,
+                                   uint32_t flightMode,
+                                   bool mavlinkConnected) {
     if (frame.empty()) return;
 
     // Draw center point of camera frame
-    cv::Point frameCenter(frame.cols / 2, frame.rows / 2);
+    cv::Point frameCenter(frame.cols / 2, 2* (frame.rows / 3));
     cv::circle(frame, frameCenter, 5, cv::Scalar(255, 255, 255), -1); // White center point
     cv::circle(frame, frameCenter, 8, cv::Scalar(0, 0, 0), 2); // Black border
 
@@ -81,6 +83,21 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
             cv::Scalar rcStatusColor = controlOutputs->rc_commands_sent ? cv::Scalar(0, 255, 255) : cv::Scalar(0, 255, 0); // Yellow for active, Green for suppressed
             cv::putText(frame, rcStatusText, cv::Point(10, 90),
                        cv::FONT_HERSHEY_SIMPLEX, 0.6, rcStatusColor, 2);
+        }
+        
+        // Display MAVLink connection status and flight mode
+        if (mavlinkConnected) {
+            std::string flightModeText = "Flight Mode: " + getFlightModeName(flightMode);
+            cv::Scalar flightModeColor = (flightMode == 2) ? cv::Scalar(0, 255, 0) : cv::Scalar(200, 200, 200); // Green for ALT_HOLD, Gray for others
+            cv::putText(frame, flightModeText, cv::Point(10, 120),
+                       cv::FONT_HERSHEY_SIMPLEX, 0.6, flightModeColor, 2);
+            
+            // Display MAVLink status
+            cv::putText(frame, "MAVLink: CONNECTED", cv::Point(10, 150),
+                       cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+        } else {
+            cv::putText(frame, "MAVLink: DISCONNECTED", cv::Point(10, 150),
+                       cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 255), 2);
         }
     }
 
@@ -223,4 +240,37 @@ void Visualizer::showCombinedView() {
     }
     
     displayCombinedView(detectionDisplay, trackingDisplay);
+}
+
+std::string Visualizer::getFlightModeName(uint32_t flightMode) {
+    // ArduPilot/PX4 flight mode numbers
+    // Common ArduPilot modes for copter:
+    switch(flightMode) {
+        case 0: return "STABILIZE";
+        case 1: return "ACRO";
+        case 2: return "ALT_HOLD";
+        case 3: return "AUTO";
+        case 4: return "GUIDED";
+        case 5: return "LOITER";
+        case 6: return "RTL";
+        case 7: return "CIRCLE";
+        case 9: return "LAND";
+        case 11: return "DRIFT";
+        case 13: return "SPORT";
+        case 14: return "FLIP";
+        case 15: return "AUTOTUNE";
+        case 16: return "POSHOLD";
+        case 17: return "BRAKE";
+        case 18: return "THROW";
+        case 19: return "AVOID_ADSB";
+        case 20: return "GUIDED_NOGPS";
+        case 21: return "SMART_RTL";
+        case 22: return "FLOWHOLD";
+        case 23: return "FOLLOW";
+        case 24: return "ZIGZAG";
+        case 25: return "SYSTEMID";
+        case 26: return "AUTOROTATE";
+        case 27: return "AUTO_RTL";
+        default: return "UNKNOWN(" + std::to_string(flightMode) + ")";
+    }
 }

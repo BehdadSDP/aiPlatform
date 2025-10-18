@@ -218,4 +218,3 @@ bool ModelManager::initializeColorDetection(const ModelConfig& config) {
     initialized_ = true;
     return true;
 }
- 

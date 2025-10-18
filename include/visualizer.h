@@ -20,7 +20,9 @@ public:
     void visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Rect& trackedBox, 
                            int trackedClassId, const std::vector<std::string>& classNames,
                            const std::vector<cv::Point>& trackingPath,
-                           const ControlOutputs* controlOutputs = nullptr);
+                           const ControlOutputs* controlOutputs = nullptr,
+                           uint32_t flightMode = 0,
+                           bool mavlinkConnected = false);
 
     void displayFrame(const cv::Mat& frame, const std::string& windowName = "Live View");
     
@@ -32,6 +34,7 @@ private:
     void setupWindow(const std::string& windowName);
     cv::Scalar getClassColor(const std::string& className);
     std::string getStatusText(const std::string& className);
+    std::string getFlightModeName(uint32_t flightMode);
     
     std::map<std::string, bool> m_windows;
     

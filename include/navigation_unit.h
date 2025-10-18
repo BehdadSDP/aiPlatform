@@ -104,6 +104,14 @@ public:
      */
     void setFilterAlpha(float alpha);
 
+    /**
+     * @brief Sets the maximum rate of change for RC outputs (slew rate limiting).
+     * @param maxChangeRate Maximum change in RC PWM units per second (default: 50).
+     *                      Lower values = smoother/slower response, higher values = faster response.
+     *                      Typical range: 20-100 (20=very smooth, 100=responsive)
+     */
+    void setMaxRCChangeRate(float maxChangeRate);
+
 private:
     Mavlink* m_mavlink = nullptr;
     
@@ -113,9 +121,9 @@ private:
     float m_rollKd = 0.05f;
     
     // PID gains for pitch axis
-    float m_pitchKp = 0.5f;
-    float m_pitchKi = 0.1f;
-    float m_pitchKd = 0.05f;
+    float m_pitchKp = 0.21f;
+    float m_pitchKi = 0.01;
+    float m_pitchKd = 0;
     
     // PID state variables for roll
     float m_rollIntegral = 0.0f;
@@ -136,6 +144,12 @@ private:
     float m_filterAlpha = 0.3f;  // Smoothing factor (0.0 = max smoothing, 1.0 = no smoothing)
     cv::Point2f m_filteredError = cv::Point2f(0.0f, 0.0f);  // Previous filtered error
     bool m_firstFilterUpdate = true;  // Flag for first filter update
+    
+    // Output rate limiting (slew rate) for smooth RC transitions
+    float m_maxRCChangeRate = 50.0f;  // Maximum RC change per second (PWM units/sec)
+    int m_previousRollOutput = 1500;   // Previous roll RC output
+    int m_previousPitchOutput = 1500;  // Previous pitch RC output
+    bool m_firstOutputUpdate = true;   // Flag for first output update
     
     // Store last outputs for debugging
     ControlOutputs m_lastOutputs;
@@ -160,6 +174,15 @@ private:
      * @return Filtered error value
      */
     cv::Point2f applyLowPassFilter(const cv::Point2f& rawError);
+
+    /**
+     * @brief Applies slew rate limiting to RC output to prevent harsh responses.
+     * @param desiredOutput The desired RC output value
+     * @param previousOutput The previous RC output value
+     * @param deltaTime Time since last update in seconds
+     * @return Rate-limited RC output value
+     */
+    int applySlewRateLimit(int desiredOutput, int previousOutput, float deltaTime);
 };
 
 #endif // NAVIGATION_UNIT_H
