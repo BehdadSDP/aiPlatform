@@ -14,7 +14,13 @@ public:
     
     // Detection visualization
     void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& detections, 
-                           const std::vector<std::string>& classNames);
+                           const std::vector<std::string>& classNames,
+                           const std::string& modelName = "");
+    
+    // Manual selection visualization with numbered boxes
+    void visualizeDetectionsWithNumbers(cv::Mat& frame, const std::vector<model::Detection>& detections, 
+                                      const std::vector<std::string>& classNames,
+                                      const std::string& modelName = "");
 
     // Tracking visualization
     void visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Rect& trackedBox, 
@@ -23,7 +29,8 @@ public:
                            const ControlOutputs* controlOutputs = nullptr,
                            uint32_t flightMode = 0,
                            bool mavlinkConnected = false,
-                           float centeringRadius = 50.0f);
+                           float centeringRadius = 50.0f,
+                           float yawDeadZoneWidth = 100.0f);
 
     void displayFrame(const cv::Mat& frame, const std::string& windowName = "Live View");
     

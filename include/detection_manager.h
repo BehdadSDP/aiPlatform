@@ -13,10 +13,15 @@ public:
     
     void runDetectionLoop(ModelManager& modelManager, std::atomic<bool>& running, 
                          ControlUnit& controlUnit, int selectionStrategy);
+    
+    // Public methods for use by application thread
+    void setSelectionStrategy(int strategy);
+    bool selectTarget(const std::vector<model::Detection>& detections, 
+                     cv::Rect& selectedBox, float& selectedConf, int& selectedClassId);
+    void handleTrackerFailure(ControlUnit& controlUnit);
 
 private:
     void processFrame(ModelManager& modelManager, ControlUnit& controlUnit, int selectionStrategy);
-    void handleTrackerFailure(ControlUnit& controlUnit);
     
     // Merged DetectionProcessor functionality
     void processDetections(const std::vector<model::Detection>& detections, 

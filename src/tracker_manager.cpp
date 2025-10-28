@@ -1,6 +1,7 @@
 #include "include/tracker_manager.h"
 #include "include/tracking/vittracker.h"
 #include "include/tracking/siamfc_pp_tracker.h"
+#include "include/logger.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -46,12 +47,12 @@ bool TrackerManager::start(const cv::Mat& frame, const cv::Rect& box, int classI
             
             return true;
         } else {
-            std::cerr << "Tracker initialization failed" << std::endl;
+            LOG_ERROR("Tracker initialization failed");
             isTracking_ = false;
             return false;
         }
     } catch (const std::exception& e) {
-        std::cerr << "Tracker initialization failed: " << e.what() << std::endl;
+        LOG_ERROR("Tracker initialization failed: {}", e.what());
         isTracking_ = false;
         return false;
     }
@@ -79,7 +80,7 @@ void TrackerManager::update(const cv::Mat& frame) {
             }
         }
     } catch (const std::exception& e) {
-        std::cerr << "Tracker update failed: " << e.what() << std::endl;
+        LOG_ERROR("Tracker update failed: {}", e.what());
         isTracking_ = false;
         trackingPath_.clear();
         trackedClassId_ = -1;

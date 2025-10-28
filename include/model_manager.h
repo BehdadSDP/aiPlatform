@@ -46,6 +46,7 @@ public:
     ModelType getCurrentModelType() const { return currentConfig_.type; }
     const std::vector<std::string>& getClassNames() const { return currentConfig_.classNames; }
     int getTargetClassId() const { return currentConfig_.targetClassId; }
+    std::string getModelName() const;
     
     // Model-specific methods
     bool isHelmetModel() const { return currentConfig_.type == ModelType::HELMET_DETECTION; }

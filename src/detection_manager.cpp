@@ -1,5 +1,6 @@
 #include "include/detection_manager.h"
 #include "include/frame_buffer_manager.h"
+#include "include/logger.h"
 #include <thread>
 #include <chrono>
 
@@ -31,6 +32,14 @@ void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<
         // std::cout << "Detection running..." << std::endl; // Debug: Uncomment to see when detection runs
         std::vector<model::Detection> detections = modelManager.detect(frame);
         
+        // Always visualize detections (whether empty or not, to show the model name)
+        // Use numbered visualization for manual selection strategy
+        if (selectionStrategy == 6) { // Manual selection strategy
+            visualizer_.visualizeDetectionsWithNumbers(frame, detections, modelManager.getClassNames(), modelManager.getModelName());
+        } else {
+            visualizer_.visualizeDetections(frame, detections, modelManager.getClassNames(), modelManager.getModelName());
+        }
+        
         if (!detections.empty()) {
             // ✅ OPTIMIZED: Use reference to avoid copying detection data
             cv::Rect selectedBox;
@@ -40,9 +49,6 @@ void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<
             if (detectionFailure_.selectTarget(detections, selectedBox, selectedConf, selectedClassId)) {
                 // ✅ OPTIMIZED: Pass frame by reference to avoid cloning
                 controlUnit.setDetection(selectedBox, frame, frameData.sequence, selectedClassId);
-                
-                // ✅ OPTIMIZED: Use frame by reference for visualization
-                visualizer_.visualizeDetections(frame, detections, modelManager.getClassNames());
             }
         }
         
@@ -58,6 +64,15 @@ void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<
     }
 }
 
+void DetectionManager::setSelectionStrategy(int strategy) {
+    detectionFailure_.setSelectionStrategy(strategy);
+}
+
+bool DetectionManager::selectTarget(const std::vector<model::Detection>& detections, 
+                                    cv::Rect& selectedBox, float& selectedConf, int& selectedClassId) {
+    return detectionFailure_.selectTarget(detections, selectedBox, selectedConf, selectedClassId);
+}
+
 void DetectionManager::handleTrackerFailure(ControlUnit& controlUnit) {
     if (controlUnit.hasTrackerFailed()) {
         cv::Mat lastFrame;
@@ -68,10 +83,14 @@ void DetectionManager::handleTrackerFailure(ControlUnit& controlUnit) {
         // This respects the user's selection strategy choice from config.txt
         if (detectionFailure_.getCurrentStrategyId() == DetectionFailure::SIMILARITY) {
             updateSimilarityReference(lastFrame, lastBox);
-            std::cout << "Tracker failure detected. Updated similarity reference for similarity strategy." << std::endl;
+            LOG_INFO("Tracker failure detected. Updated similarity reference for similarity strategy.");
+        } else if (detectionFailure_.getCurrentStrategyId() == DetectionFailure::MANUAL_SELECTION) {
+            // Reset manual selection state to allow new selection after tracker failure
+            detectionFailure_.resetManualSelectionState();
+            LOG_INFO("Tracker failure detected. Manual selection state reset. Ready for new object selection.");
         } else {
-            std::cout << "Tracker failure detected. Using configured selection strategy: " 
-                      << detectionFailure_.getCurrentStrategyName() << std::endl;
+            LOG_INFO("Tracker failure detected. Using configured selection strategy: {}",
+                     detectionFailure_.getCurrentStrategyName());
         }
         
         // Clear the tracker failure flag after processing
@@ -96,7 +115,12 @@ void DetectionManager::processFrame(ModelManager& modelManager, ControlUnit& con
     const std::vector<std::string>& classNames = modelManager.getClassNames();
 
     // Visualize detections (draws on frame but doesn't display)
-    visualizer_.visualizeDetections(frame, detections, classNames);
+    // Use numbered visualization for manual selection strategy
+    if (selectionStrategy == 6) { // Manual selection strategy
+        visualizer_.visualizeDetectionsWithNumbers(frame, detections, classNames, modelManager.getModelName());
+    } else {
+        visualizer_.visualizeDetections(frame, detections, classNames, modelManager.getModelName());
+    }
 
     // Update detection frame for combined view only (no separate detection window)
     visualizer_.updateDetectionFrame(frame);

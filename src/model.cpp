@@ -1,6 +1,7 @@
 // model.cpp
 
 #include "include/model.h"
+#include "include/logger.h"
 #include <stdexcept>
 #include <iomanip> // For std::fixed, std::setprecision if needed for printing
 #include <fstream> // For std::ifstream
@@ -28,13 +29,13 @@ model::model(const std::string &onnxPath, const std::string &namesPath, int targ
         #ifdef CV_DNN_BACKEND_INFERENCE_ENGINE
         yoloNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_INFERENCE_ENGINE);
         yoloNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-        std::cout << "Using OpenVINO backend for inference" << std::endl;
+        LOG_INFO("Using OpenVINO backend for inference");
         backendSet = true;
         #else
-        std::cout << "OpenVINO backend not available in this OpenCV build" << std::endl;
+        LOG_DEBUG("OpenVINO backend not available in this OpenCV build");
         #endif
     } catch (const cv::Exception& e) {
-        std::cout << "OpenVINO not available, trying alternatives..." << std::endl;
+        LOG_DEBUG("OpenVINO not available, trying alternatives...");
     }
     
     // Try ONNX Runtime backend (usually faster than OpenCV)
@@ -44,13 +45,13 @@ model::model(const std::string &onnxPath, const std::string &namesPath, int targ
             #ifdef CV_DNN_BACKEND_ONNX
             yoloNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_ONNX);
             yoloNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-            std::cout << "Using ONNX Runtime backend for inference" << std::endl;
+            LOG_INFO("Using ONNX Runtime backend for inference");
             backendSet = true;
             #else
-            std::cout << "ONNX Runtime backend not available in this OpenCV build" << std::endl;
+            LOG_DEBUG("ONNX Runtime backend not available in this OpenCV build");
             #endif
         } catch (const cv::Exception& e) {
-            std::cout << "ONNX Runtime not available, using OpenCV..." << std::endl;
+            LOG_DEBUG("ONNX Runtime not available, using OpenCV...");
         }
     }
     
@@ -58,7 +59,7 @@ model::model(const std::string &onnxPath, const std::string &namesPath, int targ
     if (!backendSet) {
         yoloNet_.setPreferableBackend(cv::dnn::DNN_BACKEND_DEFAULT);
         yoloNet_.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-        std::cout << "Using optimized OpenCV backend for inference" << std::endl;
+        LOG_INFO("Using optimized OpenCV backend for inference");
     }
 
     std::ifstream classFile(namesPath);
@@ -76,10 +77,10 @@ model::model(const std::string &onnxPath, const std::string &namesPath, int targ
     }
     classFile.close();
 
-    std::cout << "Loaded " << classNames_.size() << " class names." << std::endl;
+    LOG_INFO("Loaded {} class names.", classNames_.size());
     // Optional: Print loaded classes for verification
     // for (size_t i = 0; i < classNames_.size(); ++i) {
-    //     std::cout << "Class " << i << ": " << classNames_[i] << std::endl;
+    //     LOG_DEBUG("Class {}: {}", i, classNames_[i]);
     // }
 
     if (classNames_.empty()) {
@@ -119,11 +120,10 @@ model::model(const std::string &onnxPath, const std::string &namesPath, int targ
 
     // Print status (which is now safe after validation)
     if (targetClassId_ == -1) {
-         std::cout << "Target class set to: All Classes" << std::endl;
+         LOG_INFO("Target class set to: All Classes");
     } else {
          // This access is now safe due to the validation above
-         std::cout << "Target class set to: " << classNames_[targetClassId_]
-                   << " (ID: " << targetClassId_ << ")" << std::endl;
+         LOG_INFO("Target class set to: {} (ID: {})", classNames_[targetClassId_], targetClassId_);
     }
 } // End of constructor
 
@@ -131,7 +131,7 @@ model::model(const std::string &onnxPath, const std::string &namesPath, int targ
 std::vector<model::Detection> model::detect(const cv::Mat &frame)
 {
     if (frame.empty()) {
-        std::cout << "[WARN] Input frame is empty!" << std::endl;
+        LOG_WARN("Input frame is empty!");
         return {};
     }
 
@@ -157,7 +157,7 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
     try {
         yoloNet_.forward(outs);
     } catch (const cv::Exception& e) {
-        std::cerr << "[ERROR] OpenCV DNN forward pass failed: " << e.what() << std::endl;
+        LOG_ERROR("OpenCV DNN forward pass failed: {}", e.what());
         return {};
     }
     auto end_inference = std::chrono::high_resolution_clock::now();
@@ -173,7 +173,7 @@ std::vector<model::Detection> model::detect(const cv::Mat &frame)
 
     // Validate output format (simplified)
     if (output_buffer.type() != CV_32F || output_buffer.dims < 2) {
-        std::cerr << "[ERROR] Invalid output format" << std::endl;
+        LOG_ERROR("Invalid output format");
         return {};
     }
 

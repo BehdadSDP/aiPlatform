@@ -1,5 +1,6 @@
 #include "include/navigation_unit.h"
 #include "include/mavlink.h" // Include the full header for implementation
+#include "include/logger.h"
 #include <iostream>
 #include <algorithm> // For std::clamp
 
@@ -23,11 +24,19 @@ void NavigationUnit::setPitchPIDGains(float kp, float ki, float kd) {
     m_pitchKd = kd;
 }
 
+void NavigationUnit::setYawPIDGains(float kp, float ki, float kd) {
+    m_yawKp = kp;
+    m_yawKi = ki;
+    m_yawKd = kd;
+}
+
 void NavigationUnit::resetPIDStates() {
     m_rollIntegral = 0.0f;
     m_rollPreviousError = 0.0f;
     m_pitchIntegral = 0.0f;
     m_pitchPreviousError = 0.0f;
+    m_yawIntegral = 0.0f;
+    m_yawPreviousError = 0.0f;
     m_firstUpdate = true;
     
     // Reset filter state as well
@@ -52,6 +61,15 @@ void NavigationUnit::setCenteringRadius(float radius) {
 
 float NavigationUnit::getCenteringRadius() const {
     return m_centeringRadius;
+}
+
+void NavigationUnit::setYawDeadZoneWidth(float width) {
+    // Clamp to reasonable range (20-400 pixels)
+    m_yawDeadZoneWidth = std::clamp(width, 20.0f, 400.0f);
+}
+
+float NavigationUnit::getYawDeadZoneWidth() const {
+    return m_yawDeadZoneWidth;
 }
 
 cv::Point2f NavigationUnit::applyLowPassFilter(const cv::Point2f& rawError) {
@@ -156,65 +174,89 @@ ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error,
                                      m_rollIntegral, m_rollPreviousError, deltaTime);
     float pitchPIDOutput = computePID(filteredError.y, m_pitchKp, m_pitchKi, m_pitchKd,
                                       m_pitchIntegral, m_pitchPreviousError, deltaTime);
+    
+    // Compute YAW PID output (using horizontal error for yaw control)
+    float yawPIDOutput = computePID(filteredError.x, m_yawKp, m_yawKi, m_yawKd,
+                                    m_yawIntegral, m_yawPreviousError, deltaTime);
 
     m_firstUpdate = false;
     
     // Convert PID outputs to RC commands (1000-2000)
-    const int neutral = 1527;
+    const int neutral = 1547;
     const int max_deviation = 200;  // Reduced from 200 to 100 for smoother response
-    
+
+    uint16_t channels[18] = {0};
+
     // Apply PID outputs to neutral position
     int roll_output_desired = static_cast<int>(neutral + rollPIDOutput);
     int pitch_output_desired = static_cast<int>(neutral + pitchPIDOutput);
+    int yaw_output_desired = static_cast<int>(neutral + yawPIDOutput);
     
     // Clamp the desired values to a safe range
     roll_output_desired = std::clamp(roll_output_desired, neutral - max_deviation, neutral + max_deviation);
     pitch_output_desired = std::clamp(pitch_output_desired, neutral - max_deviation, neutral + max_deviation);
+    yaw_output_desired = std::clamp(yaw_output_desired, neutral - max_deviation, neutral + max_deviation);
 
     // Apply slew rate limiting for smooth transitions
     int roll_output = applySlewRateLimit(roll_output_desired, m_previousRollOutput, deltaTime);
     //int pitch_output = applySlewRateLimit(pitch_output_desired, m_previousPitchOutput, deltaTime);
     int pitch_output = pitch_output_desired;
+    int yaw_output = applySlewRateLimit(yaw_output_desired, m_previousYawOutput, deltaTime);
+    
     // Update previous outputs for next iteration
     m_previousRollOutput = roll_output;
     m_previousPitchOutput = pitch_output;
+    m_previousYawOutput = yaw_output;
     m_firstOutputUpdate = false;
 
     // Store outputs for debugging
     outputs.roll_output = roll_output;
     outputs.pitch_output = pitch_output;
+    outputs.yaw_output = yaw_output;
     
     // Check if frame center is inside the bounding box
     bool centerInBox = isFrameCenterInBoundingBox(objectBox, frameWidth, frameHeight);
     outputs.rc_commands_sent = !centerInBox;  // Only send commands if center is outside box
     
-
+    // Check if object center is within yaw dead zone (vertical tolerance around frame center)
+    bool objectInYawDeadZone = isObjectInYawDeadZone(objectBox, frameWidth, frameHeight);
 
     // Send RC override command only if center is outside bounding box AND MAVLink is available
     if (!centerInBox && m_mavlink) {
         // Create the RC override command
-        uint16_t channels[18] = {0};
-//        channels[0] = roll_output;    // Roll
-        channels[1] = pitch_output;   // Pitch
+
+//        channels[0] = roll_output;    // Roll (Channel 1)
+        channels[1] = pitch_output;   // Pitch (Channel 2)
+        
+        // Only send yaw command if object is outside the yaw dead zone
+        /*if (!objectInYawDeadZone) {
+            channels[3] = yaw_output;     // Yaw (Channel 4)
+        }
+        else{
+            channels[3] = 0;
+        }*/
 
         // Set remaining channels to "ignore"
-        for (int i = 2; i < 18; ++i) {
+        /*for (int i = 2; i < 18; ++i) {
             channels[i] = 0;
-        }
-        channels[0] = 0;
-         std::cout << "centerinBox: " << centerInBox << std::endl;
+        }*/
+        // channels[3] = 0;
+        LOG_DEBUG("Sending RC override - Pitch: {}, Yaw: {}, Center in box: {}, Object in yaw zone: {}", 
+                  pitch_output, yaw_output, centerInBox, objectInYawDeadZone);
         // Send the command
-        bool success = m_mavlink->sendRCOverride(channels);
+        (void)m_mavlink->sendRCOverride(channels);  // Cast to void to suppress warning
     } else if (centerInBox) {
         // Frame center is inside bounding box - object is centered, no RC commands needed
         // PID calculations continue for smooth transitions when object moves away from center
-        std::cout << "centerinBox: " << centerInBox << std::endl;
-        uint16_t channels[18] = {0};
+        LOG_INFO("Object centered - Initiating landing sequence");
 //        channels[1] = 1527;
-        m_mavlink->land();
-        bool success = m_mavlink->sendRCOverride(channels);
+        //m_mavlink->land();
+        outputs.pitch_output = 4 * std::abs(outputs.pitch_output - neutral) + neutral;
+        //outputs.pitch_output = neutral ;
+        channels[1] = outputs.pitch_output;
+        (void)m_mavlink->sendRCOverride(channels);  // Cast to void to suppress warning
     } else {
-        std::cerr << "ERROR: NavigationUnit: MAVLink system not set, cannot send RC override" << std::endl;
+        LOG_ERROR("NavigationUnit: MAVLink system not set, cannot send RC override");
     }
     m_lastOutputs = outputs;
     return outputs;
@@ -237,10 +279,26 @@ bool NavigationUnit::isFrameCenterInBoundingBox(const cv::Rect& objectBox, int f
     return distance <= m_centeringRadius;
 }
 
+bool NavigationUnit::isObjectInYawDeadZone(const cv::Rect& objectBox, int frameWidth, int frameHeight) {
+    // Calculate the center point of the frame
+    cv::Point2f frameCenter(frameWidth / 2.0f, 2.0f * (frameHeight / 3.0f));
+    
+    // Calculate the center of the tracked object's bounding box
+    cv::Point2f objectCenter(objectBox.x + objectBox.width / 2.0f, 
+                             objectBox.y + objectBox.height / 2.0f);
+    
+    // Calculate horizontal distance between frame center and object center
+    float dx = std::abs(frameCenter.x - objectCenter.x);
+    
+    // Check if object center is within the vertical dead zone around frame center
+    // The dead zone extends +/- (m_yawDeadZoneWidth / 2) horizontally from frame center
+    return dx <= (m_yawDeadZoneWidth / 2.0f);
+}
+
 
 bool NavigationUnit::armVehicle(bool arm, bool force) {
     if (!m_mavlink) {
-        std::cerr << "NavigationUnit: MAVLink system not set, cannot send arm command" << std::endl;
+        LOG_ERROR("NavigationUnit: MAVLink system not set, cannot send arm command");
         return false;
     }
 

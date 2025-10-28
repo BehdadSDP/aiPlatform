@@ -1,5 +1,6 @@
 #include "include/model_manager.h"
 #include "include/detection/color_detector.h"
+#include "include/logger.h"
 #include <iostream>
 #include <fstream>
 
@@ -22,7 +23,7 @@ bool ModelManager::initialize(const ModelConfig& config) {
         {
             // Load class names for ONNX models
             if (!loadClassNames(config.classNamesPath, currentConfig_.classNames)) {
-                std::cerr << "Failed to load class names from: " << config.classNamesPath << std::endl;
+                LOG_ERROR("Failed to load class names from: {}", config.classNamesPath);
                 return false;
             }
             
@@ -37,21 +38,21 @@ bool ModelManager::initialize(const ModelConfig& config) {
             // Initialize the ONNX YOLO model
             activeModel_ = std::make_unique<model>(config.modelPath, config.classNamesPath, currentConfig_.targetClassId);
             
-            std::cout << "ModelManager initialized successfully:" << std::endl;
+            LOG_INFO("ModelManager initialized successfully:");
             std::string modelTypeName = (config.type == ModelType::HELMET_DETECTION) ? "Helmet Detection" :
                                        (config.type == ModelType::FACE_DETECTION) ? "Face Detection (YOLOv10n)" :
                                        "COCO General";
-            std::cout << "  Model type: " << modelTypeName << std::endl;
-            std::cout << "  Model path: " << config.modelPath << std::endl;
-            std::cout << "  Classes loaded: " << currentConfig_.classNames.size() << std::endl;
-            std::cout << "  Target class ID: " << currentConfig_.targetClassId << std::endl;
+            LOG_INFO("  Model type: {}", modelTypeName);
+            LOG_INFO("  Model path: {}", config.modelPath);
+            LOG_INFO("  Classes loaded: {}", currentConfig_.classNames.size());
+            LOG_INFO("  Target class ID: {}", currentConfig_.targetClassId);
         }
         
         initialized_ = true;
         return true;
         
     } catch (const std::exception& e) {
-        std::cerr << "Failed to initialize ModelManager: " << e.what() << std::endl;
+        LOG_ERROR("Failed to initialize ModelManager: {}", e.what());
         initialized_ = false;
         return false;
     }
@@ -59,7 +60,7 @@ bool ModelManager::initialize(const ModelConfig& config) {
 
 std::vector<model::Detection> ModelManager::detect(const cv::Mat& frame) {
     if (!initialized_) {
-        std::cerr << "ModelManager not initialized" << std::endl;
+        LOG_ERROR("ModelManager not initialized");
         return {};
     }
     
@@ -69,7 +70,7 @@ std::vector<model::Detection> ModelManager::detect(const cv::Mat& frame) {
     }
     
     if (!activeModel_) {
-        std::cerr << "ONNX model not loaded" << std::endl;
+        LOG_ERROR("ONNX model not loaded");
         return {};
     }
     
@@ -107,7 +108,7 @@ std::string ModelManager::getDetectionDescription(const model::Detection& detect
 bool ModelManager::loadClassNames(const std::string& classNamesPath, std::vector<std::string>& classNames) {
     std::ifstream file(classNamesPath);
     if (!file.is_open()) {
-        std::cerr << "Cannot open class names file: " << classNamesPath << std::endl;
+        LOG_ERROR("Cannot open class names file: {}", classNamesPath);
         return false;
     }
     
@@ -120,11 +121,11 @@ bool ModelManager::loadClassNames(const std::string& classNamesPath, std::vector
     }
     
     if (classNames.empty()) {
-        std::cerr << "No class names loaded from: " << classNamesPath << std::endl;
+        LOG_ERROR("No class names loaded from: {}", classNamesPath);
         return false;
     }
     
-    std::cout << "Loaded " << classNames.size() << " class names from: " << classNamesPath << std::endl;
+    LOG_INFO("Loaded {} class names from: {}", classNames.size(), classNamesPath);
     return true;
 }
 
@@ -189,12 +190,12 @@ bool ModelManager::initializeColorDetection(const ModelConfig& config) {
             colorConfig.colorRanges.push_back(range);
         }
         else {
-            std::cerr << "Warning: Unknown color '" << colorName << "', skipping" << std::endl;
+            LOG_WARN("Unknown color '{}', skipping", colorName);
         }
     }
     
     if (colorConfig.colorRanges.empty()) {
-        std::cerr << "Error: No valid color ranges configured" << std::endl;
+        LOG_ERROR("No valid color ranges configured");
         return false;
     }
     
@@ -205,16 +206,31 @@ bool ModelManager::initializeColorDetection(const ModelConfig& config) {
     // Create the color detector
     colorDetector_ = std::make_unique<ColorDetector>(colorConfig);
     
-    std::cout << "ModelManager initialized successfully:" << std::endl;
-    std::cout << "  Model type: Color Detection" << std::endl;
-    std::cout << "  Target colors: ";
+    LOG_INFO("ModelManager initialized successfully:");
+    LOG_INFO("  Model type: Color Detection");
+    std::string colors;
     for (const auto& colorName : config.colorConfig.targetColors) {
-        std::cout << colorName << " ";
+        colors += colorName + " ";
     }
-    std::cout << std::endl;
-    std::cout << "  Min area: " << colorConfig.minArea << std::endl;
-    std::cout << "  Max area: " << colorConfig.maxArea << std::endl;
+    LOG_INFO("  Target colors: {}", colors);
+    LOG_INFO("  Min area: {}", colorConfig.minArea);
+    LOG_INFO("  Max area: {}", colorConfig.maxArea);
     
     initialized_ = true;
     return true;
+}
+
+std::string ModelManager::getModelName() const {
+    switch (currentConfig_.type) {
+        case ModelType::COCO_GENERAL:
+            return "COCO General Detection";
+        case ModelType::HELMET_DETECTION:
+            return "Helmet Detection";
+        case ModelType::FACE_DETECTION:
+            return "Face Detection";
+        case ModelType::COLOR_DETECTION:
+            return "Color Detection";
+        default:
+            return "Unknown Model";
+    }
 }

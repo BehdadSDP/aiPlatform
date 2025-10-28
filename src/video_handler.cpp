@@ -1,4 +1,5 @@
 #include "include/video_handler.h"
+#include "include/logger.h"
 #include <iostream>
 #include <iomanip>
 
@@ -18,11 +19,11 @@ void VideoHandler::initialize(const std::string& videoPath) {
     frameSize_.width = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_WIDTH));
     frameSize_.height = static_cast<int>(cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
     
-    std::cout << "Video initialized successfully:" << std::endl;
-    std::cout << "  Resolution: " << frameSize_.width << "x" << frameSize_.height << std::endl;
-    std::cout << "  FPS: " << fps_ << std::endl;
-    std::cout << "  Total frames: " << totalFrames_ << std::endl;
-    std::cout << "  Duration: " << (totalFrames_ / fps_) << " seconds" << std::endl;
+    LOG_INFO("Video initialized successfully:");
+    LOG_INFO("  Resolution: {}x{}", frameSize_.width, frameSize_.height);
+    LOG_INFO("  FPS: {}", fps_);
+    LOG_INFO("  Total frames: {}", totalFrames_);
+    LOG_INFO("  Duration: {:.1f} seconds", (totalFrames_ / fps_));
 }
 
 void VideoHandler::startStreaming() {
@@ -31,7 +32,7 @@ void VideoHandler::startStreaming() {
     }
     
     if (isStreaming_) {
-        std::cout << "Video streaming already started" << std::endl;
+        LOG_WARN("Video streaming already started");
         return;
     }
     
@@ -40,7 +41,7 @@ void VideoHandler::startStreaming() {
     startTime_ = std::chrono::steady_clock::now();
     
     streamingThread_ = std::thread(&VideoHandler::streamingLoop, this);
-    std::cout << "Video streaming started" << std::endl;
+    LOG_INFO("Video streaming started");
 }
 
 void VideoHandler::stopStreaming() {
@@ -54,7 +55,7 @@ void VideoHandler::stopStreaming() {
         streamingThread_.join();
     }
     
-    std::cout << "Video streaming stopped" << std::endl;
+    LOG_INFO("Video streaming stopped");
 }
 
 void VideoHandler::cleanup() {
@@ -78,12 +79,12 @@ void VideoHandler::streamingLoop() {
             // End of video reached, restart from beginning for continuous playback
             cap_.set(cv::CAP_PROP_POS_FRAMES, 0);
             frameCount_ = 0;
-            std::cout << "End of video reached, restarting playback..." << std::endl;
+            LOG_INFO("End of video reached, restarting playback...");
             continue;
         }
         
         if (frame.empty()) {
-            std::cerr << "Warning: Empty frame read from video" << std::endl;
+            LOG_WARN("Empty frame read from video");
             continue;
         }
         
@@ -116,8 +117,7 @@ void VideoHandler::streamingLoop() {
         // Optional: Print progress every 100 frames
         if (frameCount_ % 100 == 0) {
             double progress = (static_cast<double>(frameCount_) / totalFrames_) * 100.0;
-            std::cout << "Video progress: " << std::fixed << std::setprecision(1) 
-                      << progress << "% (Frame " << frameCount_ << "/" << totalFrames_ << ")" << std::endl;
+            LOG_DEBUG("Video progress: {:.1f}% (Frame {}/{})", progress, frameCount_, totalFrames_);
         }
     }
 } 

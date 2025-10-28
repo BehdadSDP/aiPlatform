@@ -4,6 +4,7 @@
 #include "include/tracker_manager.h"
 #include "include/detection_manager.h"
 #include "include/frame_buffer_manager.h"
+#include "include/logger.h"
 #include <iostream>
 #include <sstream>
 #include <csignal>
@@ -21,7 +22,7 @@ Application::Application() : m_operationMode(0), m_showTrackingPath(false), m_se
 Application::~Application() {
     cleanup();
     ResourceMonitor::getInstance().stopMonitoring();
-    std::cout << "=== System Shutdown Complete ===" << std::endl;
+    LOG_INFO("=== System Shutdown Complete ===");
 }
 
 void Application::setupSignalHandler() {
@@ -71,9 +72,8 @@ bool Application::initialize(const std::string& configPath) {
         m_navigationUnit.setMaxRCChangeRate(maxRCChangeRate);
         m_navigationUnit.setFilterAlpha(filterAlpha);
         m_navigationUnit.setCenteringRadius(centeringRadius);
-        std::cout << "Navigation control configured: Slew rate=" << maxRCChangeRate 
-                  << " PWM/sec, Filter alpha=" << filterAlpha 
-                  << ", Centering radius=" << centeringRadius << "px" << std::endl;
+        LOG_INFO("Navigation control configured: Slew rate={} PWM/sec, Filter alpha={}, Centering radius={}px", 
+                 maxRCChangeRate, filterAlpha, centeringRadius);
 
         m_controlUnit.setDetectionMode(config_utils::getConfigInt(m_config, "detection.mode"));
         m_controlUnit.setDetectionInterval(config_utils::getConfigInt(m_config, "detection.interval"));
@@ -81,7 +81,7 @@ bool Application::initialize(const std::string& configPath) {
         m_controlUnit.setOperationMode(m_operationMode);
 
     } catch (const std::exception& e) {
-        std::cerr << "Initialization failed: " << e.what() << std::endl;
+        LOG_ERROR("Initialization failed: {}", e.what());
         return false;
     }
     return true;
@@ -111,23 +111,24 @@ operation mode: detection + tracking or detection only
 selection strategy: highest confidence, upper bounding box, lower bounding box, rightmost bounding box, leftmost bounding box, similarity based
 */
 void Application::logConfiguration() const {
-    std::cout << "=== AI Platform Starting ===" << std::endl;
-    std::cout << "Input: " << (config_utils::getConfigInt(m_config, "input.input_type") == 0 ? "Camera" : "Video") << std::endl;
+    LOG_INFO("=== Configuration ===");
+    LOG_INFO("Input: {}", (config_utils::getConfigInt(m_config, "input.input_type") == 0 ? "Camera" : "Video"));
     
     int modelType = config_utils::getConfigInt(m_config, "detection_model.model_type");
     std::string modelTypeName = (modelType == 0) ? "Vehicle Detection" :
                                (modelType == 1) ? "Helmet Detection" :
-                               (modelType == 2) ? "Face Detection" : "Unknown";
-    std::cout << "Model: " << modelTypeName << std::endl;
+                               (modelType == 2) ? "Face Detection" : 
+                               (modelType == 3) ? "Color Detection" : "Unknown";
+    LOG_INFO("Model: {}", modelTypeName);
     
-    std::cout << "Operation Mode: " << (m_operationMode == 0 ? "Detection + Tracking" : "Detection Only") << std::endl;
+    LOG_INFO("Operation Mode: {}", (m_operationMode == 0 ? "Detection + Tracking" : "Detection Only"));
     if (m_operationMode == 0) {
         int trackerType = config_utils::getConfigInt(m_config, "tracking.tracker_type");
-        std::cout << "Tracker: " << (trackerType == 0 ? "VitTracker" : "SiamFCPP") << std::endl;
-        std::cout << "Path Visualization: " << (m_showTrackingPath ? "Enabled" : "Disabled") << std::endl;
+        LOG_INFO("Tracker: {}", (trackerType == 0 ? "VitTracker" : "SiamFCPP"));
+        LOG_INFO("Path Visualization: {}", (m_showTrackingPath ? "Enabled" : "Disabled"));
     }
     
-    std::cout << "Detection Mode: " << (config_utils::getConfigInt(m_config, "detection.mode") == 0 ? "Interval" : "Continuous") << std::endl;
+    LOG_INFO("Detection Mode: {}", (config_utils::getConfigInt(m_config, "detection.mode") == 0 ? "Interval" : "Continuous"));
 
     // Display selection strategy
     std::string strategyName;
@@ -140,8 +141,8 @@ void Application::logConfiguration() const {
         case 5: strategyName = "Similarity Based"; break;
         default: strategyName = "Unknown"; break;
     }
-    std::cout << "Selection Strategy: " << strategyName << std::endl;
-    std::cout << "MAVLink: " << (m_mavlinkEnabled ? "Enabled" : "Disabled") << std::endl;
+    LOG_INFO("Selection Strategy: {}", strategyName);
+    LOG_INFO("MAVLink: {}", (m_mavlinkEnabled ? "Enabled" : "Disabled"));
 }
 
 /*
@@ -183,25 +184,27 @@ bool Application::initializeInputSource() {
         m_cameraHandler->startStreaming();
         
         int rotationAngle = config_utils::getConfigInt(m_config, "camera.rotation_angle");
-        std::cout << "Camera initialized: " << config_utils::getConfigInt(m_config, "camera.width") << "x" << config_utils::getConfigInt(m_config, "camera.height") << "@" << config_utils::getConfigFloat(m_config, "camera.frame_rate") << "fps";
+        std::string cameraInfo = "Camera initialized: " + std::to_string(config_utils::getConfigInt(m_config, "camera.width")) + "x" + 
+                                 std::to_string(config_utils::getConfigInt(m_config, "camera.height")) + "@" + 
+                                 std::to_string(static_cast<int>(config_utils::getConfigFloat(m_config, "camera.frame_rate"))) + "fps";
         if (rotationAngle != 0) {
-            std::cout << " (rotated " << rotationAngle << "°)";
+            cameraInfo += " (rotated " + std::to_string(rotationAngle) + "°)";
         }
         if (autoExposure) {
-            std::cout << " [Auto-Exposure: ON]";
+            cameraInfo += " [Auto-Exposure: ON]";
         } else {
-            std::cout << " [Exposure: " << config_utils::getConfigInt(m_config, "camera.exposure_time_us") << "μs]";
+            cameraInfo += " [Exposure: " + std::to_string(config_utils::getConfigInt(m_config, "camera.exposure_time_us")) + "μs]";
         }
         if (deblurEnabled) {
-            std::cout << " [Deblur: ON]";
+            cameraInfo += " [Deblur: ON]";
         }
-        std::cout << std::endl;
+        LOG_INFO("{}", cameraInfo);
     } else if (inputType == 1) {
         std::string videoPath = config_utils::getConfigString(m_config, "input.video_path");
         m_videoHandler = std::make_unique<VideoHandler>(m_controlUnit);
         m_videoHandler->initialize(videoPath);
         m_videoHandler->startStreaming();
-        std::cout << "Video source initialized: " << videoPath << std::endl;
+        LOG_INFO("Video source initialized: {}", videoPath);
     } else {
         throw std::runtime_error("Invalid input type: " + std::to_string(inputType));
     }
@@ -256,7 +259,7 @@ bool Application::initializeModels() {
     if (!m_modelManager.initialize(modelConfig)) {
         throw std::runtime_error("Failed to initialize detection model");
     }
-    std::cout << "Detection model loaded successfully" << std::endl;
+    LOG_INFO("Detection model loaded successfully");
     return true;
 }
 
@@ -269,7 +272,7 @@ tracker names: path to tracker names file
 */
 bool Application::initializeTracker() {
     if (m_operationMode != 0) {
-        std::cout << "Detection-only mode: Tracker disabled" << std::endl;
+        LOG_INFO("Detection-only mode: Tracker disabled");
         return true;
     }
 
@@ -284,7 +287,7 @@ bool Application::initializeTracker() {
         throw std::runtime_error("Failed to initialize tracker");
     }
     m_trackerManager.initialize(std::move(tracker), m_showTrackingPath);
-    std::cout << "Tracker initialized successfully" << std::endl;
+    LOG_INFO("Tracker initialized successfully");
     return true;
 }
 
@@ -299,9 +302,9 @@ void Application::initializeFrameBuffer() {
     int cleanupInterval = config_utils::getConfigInt(m_config, "frame_buffer.cleanup_interval");
     if (cleanupInterval > 0) {
         FrameBufferManager::getInstance().setCleanupInterval(cleanupInterval);
-        std::cout << "Frame buffer cleanup interval set to: " << cleanupInterval << " frames" << std::endl;
+        LOG_INFO("Frame buffer cleanup interval set to: {} frames", cleanupInterval);
     } else {
-        std::cout << "Using default frame buffer cleanup interval: 100 frames" << std::endl;
+        LOG_INFO("Using default frame buffer cleanup interval: 100 frames");
     }
 }
 
@@ -312,11 +315,11 @@ detection thread
 tracking thread
 */
 void Application::run() {
-    std::cout << "=== System Ready - Processing Started ===" << std::endl;
+    LOG_INFO("=== System Ready - Processing Started ===");
     
     // Enable combined view for detection and tracking
     m_visualizer.enableCombinedView(true);
-    std::cout << "Combined Detection & Tracking view enabled" << std::endl;
+    LOG_INFO("Combined Detection & Tracking view enabled");
 
     std::thread yoloThread(&Application::modelsThread, this);
 
@@ -334,8 +337,7 @@ void Application::run() {
             
             m_detectionFailure.configureSimilarityWeights(spatialWeight, appearanceWeight, sizeWeight, maxMovement);
             m_detectionFailure.setSimilarityThreshold(similarityThreshold);
-            std::cout << "En"
-                         "hanced similarity configured with threshold: " << similarityThreshold << std::endl;
+            LOG_INFO("Enhanced similarity configured with threshold: {}", similarityThreshold);
         }
         
         trackerThread = std::thread(&Application::trackingThread, this);
@@ -352,9 +354,60 @@ void Application::run() {
 
 void Application::modelsThread() {
     DetectionManager detectionManager(m_visualizer);
+    detectionManager.setSelectionStrategy(m_selectionStrategy);
     
-    // Use the public runDetectionLoop method which handles the detection loop internally
-    detectionManager.runDetectionLoop(m_modelManager, m_running, m_controlUnit, m_selectionStrategy);
+    while (m_running) {
+        // Check if detection should run based on detection mode
+        if (!m_controlUnit.waitForDetectionTurn()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
+        }
+        
+        FrameData frameData;
+        if (!FrameBufferManager::getInstance().getLatestFrame(frameData)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+        
+        cv::Mat frame = frameData.image;
+        if (frame.empty()) continue;
+        
+        // Run detection
+        std::vector<model::Detection> detections = m_modelManager.detect(frame);
+        
+        // Visualization - ALWAYS show first, especially for manual selection
+        {
+            std::lock_guard<std::mutex> lock(m_visMutex);
+            
+            // Visualize detections with model name - use numbered visualization for manual selection
+            if (m_selectionStrategy == 6) { // Manual selection strategy
+                m_visualizer.visualizeDetectionsWithNumbers(frame, detections, m_modelManager.getClassNames(), m_modelManager.getModelName());
+            } else {
+                m_visualizer.visualizeDetections(frame, detections, m_modelManager.getClassNames(), m_modelManager.getModelName());
+            }
+            
+            // Update detection frame for combined view
+            m_visualizer.updateDetectionFrame(frame);
+            m_visualizer.showCombinedView();
+        }
+        
+        // Process detections for tracking - AFTER visualization is shown
+        if (!detections.empty()) {
+            cv::Rect selectedBox;
+            float selectedConf;
+            int selectedClassId;
+            
+            if (detectionManager.selectTarget(detections, selectedBox, selectedConf, selectedClassId)) {
+                m_controlUnit.setDetection(selectedBox, frame, frameData.sequence, selectedClassId);
+            }
+        }
+        
+        // Handle tracker failure recovery
+        detectionManager.handleTrackerFailure(m_controlUnit);
+        
+        // Small delay to prevent excessive CPU usage
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
 }
 
 /*
@@ -385,9 +438,9 @@ void Application::trackingThread() {
     std::filesystem::path sessionDir(m_sessionFolder);
     if (!std::filesystem::exists(sessionDir)) {
         std::filesystem::create_directories(sessionDir);
-        std::cout << "Created session folder: " << m_sessionFolder << std::endl;
+        LOG_INFO("Created session folder: {}", m_sessionFolder);
     }
-    int control_test = true;
+    
     while(m_running) {
         if (!m_controlUnit.waitForTrackingTurn()) {
             continue;
@@ -432,20 +485,29 @@ void Application::trackingThread() {
             }
                // Calculate navigation error and generate control commands
                cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
-               ControlOutputs controlOutputs = m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+               m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
 
             }
 
             if (!m_trackerManager.isTracking()) {
                 m_controlUnit.setIsTracking(false);
                 m_controlUnit.setTrackerFailed(true, frame, m_trackerManager.getLastTrackBox());
-                std::cout << "Tracking lost - Re-enabling detection for re-initialization" << std::endl;
+                LOG_WARN("Tracking lost - Re-enabling detection for re-initialization");
             }
         }
 
         // Process incoming MAVLink messages
         if (m_mavlink && m_mavlinkEnabled) {
             m_mavlink->processIncomingMessages();
+            
+            // Log altitude data periodically (every ~100 frames to avoid spam)
+            static int altLogCounter = 0;
+            if (++altLogCounter >= 100) {
+                float altitude = m_mavlink->getCurrentAltitudeMSL();
+                float climbRate = m_mavlink->getCurrentClimbRate();
+                LOG_INFO("Current altitude: {} m, Climb rate: {} m/s", altitude, climbRate);
+                altLogCounter = 0;
+            }
         }
 
         // Visualization
@@ -465,16 +527,17 @@ void Application::trackingThread() {
                 m_visualizer.visualizeTracking(frame, m_trackerManager.isTracking(), m_trackerManager.getLastTrackBox(),
                                              m_trackerManager.getTrackedClassId(), m_modelManager.getClassNames(),
                                              m_trackerManager.getTrackingPath(), &controlOutputs, flightMode, mavlinkConnected,
-                                             m_navigationUnit.getCenteringRadius());
+                                             m_navigationUnit.getCenteringRadius(),
+                                             m_navigationUnit.getYawDeadZoneWidth());
                 
                 if(true){
                     // Save the final visualized tracking frame to session folder (only when tracking)
                     std::string filename = m_sessionFolder + "/tracking_frame_" + std::to_string(frameCounter++) + ".jpg";
                     bool saved = cv::imwrite(filename, frame);
                     if (saved) {
-                        std::cout << "Saved tracking frame: " << filename << std::endl;
+                        LOG_DEBUG("Saved tracking frame: {}", filename);
                     } else {
-                        std::cerr << "Failed to save tracking frame: " << filename << std::endl;
+                        LOG_ERROR("Failed to save tracking frame: {}", filename);
                     }
                 }
 
@@ -499,7 +562,7 @@ Initialize MAVLink communication if enabled
 */
 bool Application::initializeMAVLink() {
     if (!m_mavlinkEnabled) {
-        std::cout << "MAVLink disabled in configuration" << std::endl;
+        LOG_INFO("MAVLink disabled in configuration");
         return true;
     }
 
@@ -515,26 +578,35 @@ bool Application::initializeMAVLink() {
 
         // Initialize UART
         if (!m_mavlink->initializeUART(uartDevice, baudRate)) {
-            std::cerr << "Failed to initialize MAVLink UART" << std::endl;
+            LOG_ERROR("Failed to initialize MAVLink UART");
             return false;
         }
 
         // Start MAVLink communication
         if (!m_mavlink->start()) {
-            std::cerr << "Failed to start MAVLink communication" << std::endl;
+            LOG_ERROR("Failed to start MAVLink communication");
             return false;
         }
 
-        std::cout << "✅ MAVLink initialized successfully" << std::endl;
-        std::cout << "   System ID: " << static_cast<int>(systemId) << std::endl;
-        std::cout << "   Component ID: " << static_cast<int>(componentId) << std::endl;
-        std::cout << "   UART: " << uartDevice << " @ " << baudRate << " baud" << std::endl;
+        LOG_INFO("✅ MAVLink initialized successfully");
+        LOG_INFO("   System ID: {}", static_cast<int>(systemId));
+        LOG_INFO("   Component ID: {}", static_cast<int>(componentId));
+        LOG_INFO("   UART: {} @ {} baud", uartDevice, baudRate);
+        
+        // Wait a moment for the connection to stabilize
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        
+        // Request VFR_HUD stream (contains altitude data)
+        // MAV_DATA_STREAM_EXTENDED_STATUS = 1 (includes VFR_HUD)
+        // Request at 5 Hz (5 updates per second)
+        m_mavlink->requestDataStream(1, 5);
+        LOG_INFO("Requested VFR_HUD data stream at 5 Hz");
         
         // Test message format
         m_mavlink->testMAVLinkMessageFormat();
 
     } catch (const std::exception& e) {
-        std::cerr << "MAVLink initialization failed: " << e.what() << std::endl;
+        LOG_ERROR("MAVLink initialization failed: {}", e.what());
         return false;
     }
 
@@ -545,7 +617,7 @@ void Application::cleanup() {
     if (m_mavlink) {
         m_mavlink->stop();
         m_mavlink.reset();
-        std::cout << "MAVLink communication stopped" << std::endl;
+        LOG_INFO("MAVLink communication stopped");
     }
     
     if (m_cameraHandler) {
@@ -555,6 +627,3 @@ void Application::cleanup() {
         m_videoHandler->cleanup();
     }
 } 
-
-
-

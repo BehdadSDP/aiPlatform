@@ -1,4 +1,5 @@
 #include "include/camera_handler.h"
+#include "include/logger.h"
 #include <iomanip>
 #include <sys/mman.h>
 #include <iostream>
@@ -34,23 +35,23 @@ void CameraHandler::acquireCamera(const std::string& cameraId) {
     if (camera_->acquire() < 0) {
         throw CameraException("Failed to acquire camera");
     }
-    std::cout << "Camera " << id << " acquired successfully!" << std::endl;
+    LOG_INFO("Camera {} acquired successfully!", id);
 }
 
 void CameraHandler::listCameras() const {
     auto cameras = cm_->cameras();
     if (cameras.empty()) {
-        std::cout << "No cameras found." << std::endl;
+        LOG_INFO("No cameras found.");
         return;
     }
-    std::cout << "Available cameras:" << std::endl;
+    LOG_INFO("Available cameras:");
     for (size_t i = 0; i < cameras.size(); ++i) {
-        std::cout << i << ": " << cameras[i]->id() << std::endl;
+        LOG_INFO("{}: {}", i, cameras[i]->id());
     }
 }
 
 void CameraHandler::printMessage(const std::string& message) const {
-    std::cout << message << std::endl;
+    LOG_INFO("{}", message);
 }
 
 void CameraHandler::displayOptionsSummary(const std::vector<std::pair<Size, PixelFormat>>& options, size_t customIndex) const {
@@ -99,13 +100,12 @@ std::vector<std::pair<Size, PixelFormat>> CameraHandler::generateConfigOptions(
             auto status = config->validate();
             if (status != CameraConfiguration::Status::Invalid) {
                 options.emplace_back(size, pixelFormat);
-                std::cout << index++ << ": " << size.width << "x" << size.height << "-"
-                          << pixelFormat.toString() << " ("
-                          << (status == CameraConfiguration::Status::Valid ? "valid" : "adjusted") << ")" << std::endl;
+                LOG_INFO("{}: {}x{}-{} ({})", index++, size.width, size.height, pixelFormat.toString(),
+                         (status == CameraConfiguration::Status::Valid ? "valid" : "adjusted"));
             }
         }
     }
-    std::cout << index << ": Enter custom width and height" << std::endl;
+    LOG_INFO("{}: Enter custom width and height", index);
     return options;
 }
 
@@ -505,12 +505,12 @@ void CameraHandler::stopStreaming() {
 
 void CameraHandler::requestComplete(Request* request) {
     if (!request) {
-        std::cerr << "Null request received" << std::endl;
+        LOG_ERROR("Null request received");
         return;
     }
     
     if (request->status() != Request::RequestComplete) {
-        std::cerr << "Request failed with status: " << request->status() << std::endl;
+        LOG_ERROR("Request failed with status: {}", request->status());
         // Still try to reuse the request
         request->reuse(Request::ReuseBuffers);
         camera_->queueRequest(request);
@@ -520,7 +520,7 @@ void CameraHandler::requestComplete(Request* request) {
     const auto& buffers = request->buffers();
     for (const auto& [stream, buffer] : buffers) {
         if (!stream || !buffer) {
-            std::cerr << "Invalid stream or buffer" << std::endl;
+            LOG_ERROR("Invalid stream or buffer");
             continue;
         }
         
@@ -529,7 +529,7 @@ void CameraHandler::requestComplete(Request* request) {
 
         const auto& planes = buffer->planes();
         if (planes.empty()) {
-            std::cerr << "No planes in buffer" << std::endl;
+            LOG_ERROR("No planes in buffer");
             continue;
         }
         
@@ -552,7 +552,7 @@ void CameraHandler::requestComplete(Request* request) {
         size_t length = planes[0].length;
         void* mappedData = mapBuffer(fd, length, bufferIndex);
         if (mappedData == MAP_FAILED || mappedData == nullptr) {
-            std::cerr << "Failed to map buffer" << std::endl;
+            LOG_ERROR("Failed to map buffer");
             continue;
         }
 
@@ -628,7 +628,7 @@ void* CameraHandler::mapBuffer(int fd, size_t length, int bufferIndex) {
             buffer.active = true;
             return buffer.ptr;
         } else {
-            std::cerr << "Failed to map buffer: " << strerror(errno) << std::endl;
+            LOG_ERROR("Failed to map buffer: {}", strerror(errno));
             return nullptr;
         }
     }
@@ -636,7 +636,7 @@ void* CameraHandler::mapBuffer(int fd, size_t length, int bufferIndex) {
     // Fallback to regular mmap with proper tracking
     void* ptr = mmap(nullptr, length, PROT_READ, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED) {
-        std::cerr << "Fallback mmap failed: " << strerror(errno) << std::endl;
+        LOG_ERROR("Fallback mmap failed: {}", strerror(errno));
         return nullptr;
     }
     

@@ -1,4 +1,5 @@
 #include "include/mavlink.h"
+#include "include/logger.h"
 #include <iostream>
 #include <cstring>
 #include <errno.h>
@@ -20,8 +21,8 @@ Mavlink::Mavlink(uint8_t system_id, uint8_t component_id)
     , current_flight_mode_(0)
     , current_base_mode_(0)
 {
-    std::cout << "Mavlink initialized with System ID: " << static_cast<int>(system_id_)
-              << ", Component ID: " << static_cast<int>(component_id_) << std::endl;
+    LOG_INFO("Mavlink initialized with System ID: {}, Component ID: {}", 
+             static_cast<int>(system_id_), static_cast<int>(component_id_));
 }
 
 Mavlink::~Mavlink()
@@ -35,42 +36,42 @@ bool Mavlink::initializeUART(const std::string& serial_device, int baud_rate)
     serial_device_ = serial_device;
     baud_rate_ = baud_rate;
     
-    std::cout << "Initializing UART on Raspberry Pi 5..." << std::endl;
-    std::cout << "Device: " << serial_device << ", Baud Rate: " << baud_rate << std::endl;
+    LOG_INFO("Initializing UART on Raspberry Pi 5...");
+    LOG_INFO("Device: {}, Baud Rate: {}", serial_device, baud_rate);
     
     // Check if device exists first
     if (access(serial_device.c_str(), F_OK) != 0) {
-        std::cerr << "ERROR: Serial device " << serial_device << " does not exist" << std::endl;
-        std::cerr << "Available devices: " << std::endl;
+        LOG_ERROR("Serial device {} does not exist", serial_device);
+        LOG_INFO("Available devices:");
         system("ls -la /dev/tty* | grep -E '(ttyAMA|ttyS|serial)'");
         return false;
     }
     
     // Check permissions
     if (access(serial_device.c_str(), R_OK | W_OK) != 0) {
-        std::cerr << "ERROR: No permission to access " << serial_device << std::endl;
-        std::cerr << "Solutions:" << std::endl;
-        std::cerr << "  1. Add user to dialout group: sudo usermod -a -G dialout $USER" << std::endl;
-        std::cerr << "  2. Set device permissions: sudo chmod 666 " << serial_device << std::endl;
-        std::cerr << "  3. Enable UART in raspi-config: sudo raspi-config -> Interface Options -> Serial" << std::endl;
+        LOG_ERROR("No permission to access {}", serial_device);
+        LOG_INFO("Solutions:");
+        LOG_INFO("  1. Add user to dialout group: sudo usermod -a -G dialout $USER");
+        LOG_INFO("  2. Set device permissions: sudo chmod 666 {}", serial_device);
+        LOG_INFO("  3. Enable UART in raspi-config: sudo raspi-config -> Interface Options -> Serial");
         return false;
     }
     
     // Open UART port with proper flags for Raspberry Pi 5
     serial_fd_ = open(serial_device.c_str(), O_RDWR | O_NOCTTY | O_NDELAY);
     if (serial_fd_ < 0) {
-        std::cerr << "ERROR: Failed to open UART device " << serial_device 
-                  << ": " << strerror(errno) << " (errno: " << errno << ")" << std::endl;
+        LOG_ERROR("Failed to open UART device {}: {} (errno: {})", 
+                  serial_device, strerror(errno), errno);
         
         // Provide detailed troubleshooting for Raspberry Pi 5
-        std::cerr << "Raspberry Pi 5 UART Troubleshooting:" << std::endl;
-        std::cerr << "  1. Check UART is enabled: grep enable_uart /boot/config.txt" << std::endl;
-        std::cerr << "  2. Check UART overlay: grep uart /boot/config.txt" << std::endl;
-        std::cerr << "  3. Check cmdline: grep console /boot/cmdline.txt" << std::endl;
-        std::cerr << "  4. Required in /boot/config.txt:" << std::endl;
-        std::cerr << "     enable_uart=1" << std::endl;
-        std::cerr << "     dtoverlay=uart0" << std::endl;
-        std::cerr << "  5. Reboot after config changes: sudo reboot" << std::endl;
+        LOG_INFO("Raspberry Pi 5 UART Troubleshooting:");
+        LOG_INFO("  1. Check UART is enabled: grep enable_uart /boot/config.txt");
+        LOG_INFO("  2. Check UART overlay: grep uart /boot/config.txt");
+        LOG_INFO("  3. Check cmdline: grep console /boot/cmdline.txt");
+        LOG_INFO("  4. Required in /boot/config.txt:");
+        LOG_INFO("     enable_uart=1");
+        LOG_INFO("     dtoverlay=uart0");
+        LOG_INFO("  5. Reboot after config changes: sudo reboot");
         return false;
     }
     
@@ -87,8 +88,7 @@ bool Mavlink::initializeUART(const std::string& serial_device, int baud_rate)
     
     uart_initialized_ = true;
     
-    std::cout << "✅ UART initialized successfully on " << serial_device 
-              << " at " << baud_rate << " baud" << std::endl;
+    LOG_INFO("✅ UART initialized successfully on {} at {} baud", serial_device, baud_rate);
     
     return true;
 }
@@ -96,18 +96,18 @@ bool Mavlink::initializeUART(const std::string& serial_device, int baud_rate)
 bool Mavlink::start()
 {
     if (running_) {
-        std::cout << "Mavlink communication is already running" << std::endl;
+        LOG_WARN("Mavlink communication is already running");
         return false;
     }
     
     if (!uart_initialized_) {
-        std::cerr << "ERROR: UART not initialized. Call initializeUART() first." << std::endl;
+        LOG_ERROR("UART not initialized. Call initializeUART() first.");
         return false;
     }
     
     running_ = true;
     
-    std::cout << "✅ Mavlink communication started" << std::endl;
+    LOG_INFO("✅ Mavlink communication started");
     return true;
 }
 
@@ -117,13 +117,13 @@ void Mavlink::stop()
         return;
     }
     
-    std::cout << "Stopping Mavlink communication..." << std::endl;
+    LOG_INFO("Stopping Mavlink communication...");
     
     
     // Stop all threads
     running_ = false;
     
-    std::cout << "✅ Mavlink communication stopped" << std::endl;
+    LOG_INFO("✅ Mavlink communication stopped");
 }
 
 
@@ -486,6 +486,43 @@ void Mavlink::testMAVLinkMessageFormat()
     }
 }
 
+bool Mavlink::requestDataStream(uint8_t stream_id, uint16_t rate_hz)
+{
+    if (!uart_initialized_) {
+        LOG_ERROR("UART not initialized. Cannot request data stream.");
+        return false;
+    }
+    
+    std::lock_guard<std::mutex> lock(uart_mutex_);
+    
+    mavlink_message_t msg;
+    uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
+    
+    // Pack REQUEST_DATA_STREAM message
+    mavlink_msg_request_data_stream_pack(
+        system_id_,
+        component_id_,
+        &msg,
+        target_system_id_,              // Target system ID
+        MAV_COMP_ID_AUTOPILOT1,         // Target component ID
+        stream_id,                       // Stream ID
+        rate_hz,                         // Message rate (Hz)
+        1                                // Start sending (1=start, 0=stop)
+    );
+    
+    uint16_t len = mavlink_msg_to_send_buffer(buffer, &msg);
+    
+    ssize_t bytes_written = write(serial_fd_, buffer, len);
+    
+    if (bytes_written != len) {
+        LOG_ERROR("Failed to send REQUEST_DATA_STREAM message");
+        return false;
+    }
+    
+    LOG_INFO("Requested data stream {} at {} Hz", static_cast<int>(stream_id), rate_hz);
+    return true;
+}
+
 bool Mavlink::processIncomingMessages()
 {
     if (!uart_initialized_ || !running_) {
@@ -534,8 +571,8 @@ void Mavlink::handleReceivedMessage(const mavlink_message_t& msg)
             current_flight_mode_ = heartbeat.custom_mode;
             current_base_mode_ = heartbeat.base_mode;
             
-            std::cout << "Base Mode: 0x" << std::hex << static_cast<int>(heartbeat.base_mode) 
-                      << ", Custom Mode: " << std::dec << heartbeat.custom_mode << std::endl;
+            // std::cout << "Base Mode: 0x" << std::hex << static_cast<int>(heartbeat.base_mode) 
+            //           << ", Custom Mode: " << std::dec << heartbeat.custom_mode << std::endl;
             break;
         }
         
@@ -543,8 +580,8 @@ void Mavlink::handleReceivedMessage(const mavlink_message_t& msg)
             mavlink_sys_status_t sys_status;
             mavlink_msg_sys_status_decode(&msg, &sys_status);
             
-            std::cout << "📊 SYS_STATUS received - Battery: " << sys_status.voltage_battery 
-                      << "mV, Current: " << sys_status.current_battery << "cA" << std::endl;
+            // std::cout << "📊 SYS_STATUS received - Battery: " << sys_status.voltage_battery 
+            //           << "mV, Current: " << sys_status.current_battery << "cA" << std::endl;
             break;
         }
         
@@ -552,15 +589,28 @@ void Mavlink::handleReceivedMessage(const mavlink_message_t& msg)
             mavlink_attitude_t attitude;
             mavlink_msg_attitude_decode(&msg, &attitude);
             
-            std::cout << "🛩️  ATTITUDE received - Roll: " << attitude.roll 
-                      << ", Pitch: " << attitude.pitch << ", Yaw: " << attitude.yaw << std::endl;
+            // std::cout << "🛩️  ATTITUDE received - Roll: " << attitude.roll 
+            //           << ", Pitch: " << attitude.pitch << ", Yaw: " << attitude.yaw << std::endl;
+            break;
+        }
+        
+        case MAVLINK_MSG_ID_VFR_HUD: {
+            mavlink_vfr_hud_t vfr_hud;
+            mavlink_msg_vfr_hud_decode(&msg, &vfr_hud);
+            
+            // Update altitude
+            current_altitude_msl_ = vfr_hud.alt;
+            current_climb_rate_ = vfr_hud.climb;
+            
+            // std::cout << "📈 VFR_HUD received - Alt: " << vfr_hud.alt 
+            //           << "m, Climb: " << vfr_hud.climb << "m/s, Speed: " << vfr_hud.groundspeed << "m/s" << std::endl;
             break;
         }
         
         default:
-            std::cout << "📨 Message ID " << static_cast<int>(msg.msgid) 
-                      << " received from System " << static_cast<int>(msg.sysid) 
-                      << ", Component " << static_cast<int>(msg.compid) << std::endl;
+            // std::cout << "📨 Message ID " << static_cast<int>(msg.msgid) 
+            //           << " received from System " << static_cast<int>(msg.sysid) 
+            //           << ", Component " << static_cast<int>(msg.compid) << std::endl;
             break;
     }
 }

@@ -35,6 +35,7 @@ SOURCES += \
     src/detection/color_detector.cpp \
     src/mavlink.cpp \
     src/navigation_unit.cpp \
+    src/logger.cpp \
 
 # Add libcamera and dependencies
 LIBS += -L/usr/lib -lcamera-base -lpisp -lcamera
@@ -55,6 +56,9 @@ LIBS += -L/usr/local/lib \
 
 # Add filesystem library for C++17
 LIBS += -lstdc++fs
+
+# Add spdlog and fmt for logging
+LIBS += -lspdlog -lfmt
 
 INCLUDEPATH += /usr/include/libcamera
 INCLUDEPATH += /usr/local/include/opencv4
@@ -89,3 +93,4 @@ HEADERS += \
     include/frame_pool.h \
     include/mavlink.h \
     include/navigation_unit.h \
+    include/logger.h \

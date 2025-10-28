@@ -11,6 +11,7 @@ struct ControlOutputs {
     cv::Point2f error;
     int roll_output;
     int pitch_output;
+    int yaw_output;
     bool rc_commands_sent;  // Indicates if RC override commands were actually sent
 };
 
@@ -63,6 +64,15 @@ public:
     bool isFrameCenterInBoundingBox(const cv::Rect& objectBox, int frameWidth, int frameHeight);
 
     /**
+     * @brief Checks if the object center is within the yaw dead zone (vertical tolerance area around frame center).
+     * @param objectBox The bounding box of the tracked object.
+     * @param frameWidth The width of the camera frame.
+     * @param frameHeight The height of the camera frame.
+     * @return True if object center is within yaw dead zone, false otherwise.
+     */
+    bool isObjectInYawDeadZone(const cv::Rect& objectBox, int frameWidth, int frameHeight);
+
+    /**
      * @brief Arms or disarms the vehicle.
      * @param arm True to arm, false to disarm.
      * @param force Force arm/disarm even if pre-arm checks fail.
@@ -85,6 +95,14 @@ public:
      * @param kd Derivative gain
      */
     void setPitchPIDGains(float kp, float ki, float kd);
+
+    /**
+     * @brief Sets PID gains for yaw axis.
+     * @param kp Proportional gain
+     * @param ki Integral gain
+     * @param kd Derivative gain
+     */
+    void setYawPIDGains(float kp, float ki, float kd);
 
     /**
      * @brief Resets PID controller states (integral and derivative terms).
@@ -125,6 +143,19 @@ public:
      */
     float getCenteringRadius() const;
 
+    /**
+     * @brief Sets the yaw dead zone width (horizontal tolerance).
+     * @param width The width in pixels for the horizontal dead zone.
+     *              Yaw commands are not sent when frame center is within this horizontal area.
+     */
+    void setYawDeadZoneWidth(float width);
+
+    /**
+     * @brief Gets the current yaw dead zone width.
+     * @return The yaw dead zone width in pixels.
+     */
+    float getYawDeadZoneWidth() const;
+
 private:
     Mavlink* m_mavlink = nullptr;
     
@@ -134,9 +165,14 @@ private:
     float m_rollKd = 0.05f;
     
     // PID gains for pitch axis
-    float m_pitchKp = 0.21f;
-    float m_pitchKi = 0.01;
-    float m_pitchKd = 0;
+    float m_pitchKp = 0.10f;
+    float m_pitchKi = 1;
+    float m_pitchKd = 0.1f;
+    
+    // PID gains for yaw axis
+    float m_yawKp = 0.02f;
+    float m_yawKi = 0;
+    float m_yawKd = 0;
     
     // PID state variables for roll
     float m_rollIntegral = 0.0f;
@@ -145,6 +181,10 @@ private:
     // PID state variables for pitch
     float m_pitchIntegral = 0.0f;
     float m_pitchPreviousError = 0.0f;
+    
+    // PID state variables for yaw
+    float m_yawIntegral = 0.0f;
+    float m_yawPreviousError = 0.0f;
     
     // Timing for derivative calculation
     std::chrono::steady_clock::time_point m_lastUpdateTime;
@@ -162,10 +202,14 @@ private:
     float m_maxRCChangeRate = 50.0f;  // Maximum RC change per second (PWM units/sec)
     int m_previousRollOutput = 1500;   // Previous roll RC output
     int m_previousPitchOutput = 1500;  // Previous pitch RC output
+    int m_previousYawOutput = 1500;    // Previous yaw RC output
     bool m_firstOutputUpdate = true;   // Flag for first output update
     
     // Centering tolerance
     float m_centeringRadius = 50.0f;  // Radius in pixels for centering tolerance zone
+    
+    // Yaw dead zone (horizontal tolerance)
+    float m_yawDeadZoneWidth = 100.0f;  // Width in pixels for yaw dead zone (horizontal area)
     
     // Store last outputs for debugging
     ControlOutputs m_lastOutputs;

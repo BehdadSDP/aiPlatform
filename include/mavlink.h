@@ -144,6 +144,15 @@ public:
     void testMAVLinkMessageFormat();
     
     /**
+     * @brief Request data stream from flight controller
+     * 
+     * @param stream_id Stream ID (e.g., MAV_DATA_STREAM_ALL, MAV_DATA_STREAM_EXTENDED_STATUS)
+     * @param rate_hz Desired message rate in Hz (0 to stop the stream)
+     * @return true if request sent successfully
+     */
+    bool requestDataStream(uint8_t stream_id, uint16_t rate_hz);
+    
+    /**
      * @brief Process incoming MAVLink messages and handle heartbeat
      * 
      * @return true if messages were processed successfully
@@ -157,7 +166,11 @@ public:
      */
     void handleReceivedMessage(const mavlink_message_t& msg);
     
+    // Public getters for telemetry data
     uint32_t current_flight_mode_;
+    float getCurrentAltitudeMSL() const { return current_altitude_msl_; }
+    float getCurrentClimbRate() const { return current_climb_rate_; }
+    
 private:
     // === CORE VARIABLES ===
     std::mutex uart_mutex_;
@@ -176,8 +189,11 @@ private:
     bool uart_initialized_;
     
     // Flight mode tracking
-
     uint8_t current_base_mode_;
+    
+    // VFR_HUD data
+    float current_altitude_msl_ = 0.0f;
+    float current_climb_rate_ = 0.0f;
     
     // === PRIVATE METHODS ===
     

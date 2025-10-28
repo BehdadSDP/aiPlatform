@@ -1,4 +1,5 @@
 #include "include/resource_monitor.h"
+#include "include/logger.h"
 #include <sstream>
 #include <iostream>
 #include <filesystem>
@@ -7,7 +8,7 @@
 
 void ResourceMonitor::startMonitoring(const std::string& logFilePath, int intervalSeconds) {
     if (isRunning_) {
-        std::cerr << "Resource monitoring is already running" << std::endl;
+        LOG_WARN("Resource monitoring is already running");
         return;
     }
     
@@ -16,50 +17,50 @@ void ResourceMonitor::startMonitoring(const std::string& logFilePath, int interv
         std::filesystem::path logPath(logFilePath);
         std::filesystem::create_directories(logPath.parent_path());
         
-        std::cout << "Opening log file: " << logFilePath << std::endl;
+        LOG_DEBUG("Opening log file: {}", logFilePath);
         logFile_.open(logFilePath, std::ios::app);
         
         if (!logFile_.is_open()) {
             throw std::runtime_error("Failed to open log file: " + logFilePath);
         }
         
-        std::cout << "Log file opened successfully" << std::endl;
+        LOG_DEBUG("Log file opened successfully");
 
         // Write header if file is empty
         if (logFile_.tellp() == 0) {
             logFile_ << "Timestamp,CPU Usage (%),Total Memory (MB),Used Memory (MB),Buffers (MB),Shared (MB),Cache (MB),Available (MB),Temperature (°C)\n";
             logFile_.flush();
-            std::cout << "Header written to log file" << std::endl;
+            LOG_DEBUG("Header written to log file");
         }
 
         isRunning_ = true;
         monitorThread_ = std::thread(&ResourceMonitor::monitorLoop, this, intervalSeconds);
-        std::cout << "Resource monitoring started with interval: " << intervalSeconds << " seconds" << std::endl;
+        LOG_INFO("Resource monitoring started with interval: {} seconds", intervalSeconds);
     } catch (const std::exception& e) {
-        std::cerr << "Error starting resource monitoring: " << e.what() << std::endl;
+        LOG_ERROR("Error starting resource monitoring: {}", e.what());
         throw;
     }
 }
 
 void ResourceMonitor::stopMonitoring() {
-    std::cout << "Stopping resource monitoring..." << std::endl;
+    LOG_DEBUG("Stopping resource monitoring...");
     isRunning_ = false;
     
     if (monitorThread_.joinable()) {
-        std::cout << "Waiting for monitor thread to finish..." << std::endl;
+        LOG_DEBUG("Waiting for monitor thread to finish...");
         monitorThread_.join();
     }
     
     if (logFile_.is_open()) {
-        std::cout << "Closing log file..." << std::endl;
+        LOG_DEBUG("Closing log file...");
         logFile_.close();
     }
     
-    std::cout << "Resource monitoring stopped" << std::endl;
+    LOG_INFO("Resource monitoring stopped");
 }
 
 void ResourceMonitor::monitorLoop(int intervalSeconds) {
-    std::cout << "Monitor loop started" << std::endl;
+    LOG_DEBUG("Monitor loop started");
     while (isRunning_) {
         try {
             std::this_thread::sleep_for(std::chrono::seconds(intervalSeconds));
@@ -80,7 +81,7 @@ void ResourceMonitor::monitorLoop(int intervalSeconds) {
             #endif
             
             if (!tm) {
-                std::cerr << "Failed to get local time" << std::endl;
+                LOG_ERROR("Failed to get local time");
                 continue;
             }
             
@@ -92,7 +93,7 @@ void ResourceMonitor::monitorLoop(int intervalSeconds) {
 
             std::lock_guard<std::mutex> lock(mutex_);
             if (!logFile_.is_open()) {
-                std::cerr << "Log file is not open" << std::endl;
+                LOG_ERROR("Log file is not open");
                 continue;
             }
             
@@ -100,7 +101,7 @@ void ResourceMonitor::monitorLoop(int intervalSeconds) {
             if (logFile_.tellp() == 0) {
                 logFile_ << "Timestamp,CPU Usage (%),Total Memory (MB),Used Memory (MB),Buffers (MB),Shared (MB),Cache (MB),Available (MB),Temperature (°C)\n";
                 logFile_.flush();
-                std::cout << "Header written to log file" << std::endl;
+                LOG_DEBUG("Header written to log file");
             }
             
             MemoryUsage memUsage = getDetailedMemoryUsage();
@@ -116,33 +117,26 @@ void ResourceMonitor::monitorLoop(int intervalSeconds) {
                     << std::fixed << std::setprecision(2) << temperature << "\n";
             logFile_.flush();
             
-            std::cout << "Logged metrics at " << timestamp.str() 
-                      << " - CPU: " << std::fixed << std::setprecision(2) << cpuUsage 
-                      << "%, Memory: " << std::fixed << std::setprecision(2) << memUsage.used 
-                      << "/" << std::fixed << std::setprecision(2) << memUsage.total 
-                      << "MB (Used/Total), Temp: " << std::fixed << std::setprecision(2) << temperature 
-                      << "°C" << std::endl;
+            LOG_DEBUG("Logged metrics at {} - CPU: {:.2f}%, Memory: {:.2f}/{:.2f}MB (Used/Total), Temp: {:.2f}°C",
+                      timestamp.str(), cpuUsage, memUsage.used, memUsage.total, temperature);
         
             // Detailed memory breakdown (every 10th log to avoid spam)
             static int logCounter = 0;
             if (++logCounter % 10 == 0) {
-                std::cout << "  Memory Details - Used: " << std::fixed << std::setprecision(2) << memUsage.used 
-                          << "MB, Buffers: " << std::fixed << std::setprecision(2) << memUsage.buffers 
-                          << "MB, Cache: " << std::fixed << std::setprecision(2) << memUsage.cache 
-                          << "MB, Available: " << std::fixed << std::setprecision(2) << memUsage.available 
-                          << "MB" << std::endl;
+                LOG_DEBUG("  Memory Details - Used: {:.2f}MB, Buffers: {:.2f}MB, Cache: {:.2f}MB, Available: {:.2f}MB",
+                          memUsage.used, memUsage.buffers, memUsage.cache, memUsage.available);
             }
         } catch (const std::exception& e) {
-            std::cerr << "Resource monitoring error: " << e.what() << std::endl;
+            LOG_ERROR("Resource monitoring error: {}", e.what());
         }
     }
-    std::cout << "Monitor loop ended" << std::endl;
+    LOG_DEBUG("Monitor loop ended");
 }
 
 float ResourceMonitor::getCpuUsage() {
     std::ifstream statFile("/proc/stat");
     if (!statFile.is_open()) {
-        std::cerr << "Failed to open /proc/stat" << std::endl;
+        LOG_ERROR("Failed to open /proc/stat");
         return 0.0f;
     }
     
@@ -183,7 +177,7 @@ MemoryUsage ResourceMonitor::getDetailedMemoryUsage() {
     MemoryUsage memUsage;
     std::ifstream meminfo("/proc/meminfo");
     if (!meminfo.is_open()) {
-        std::cerr << "Failed to open /proc/meminfo" << std::endl;
+        LOG_ERROR("Failed to open /proc/meminfo");
         return memUsage;
     }
     
@@ -235,7 +229,7 @@ float ResourceMonitor::getMemoryUsage() {
 float ResourceMonitor::getTemperature() {
     std::ifstream tempFile("/sys/class/thermal/thermal_zone0/temp");
     if (!tempFile.is_open()) {
-        std::cerr << "Failed to open temperature file" << std::endl;
+        LOG_ERROR("Failed to open temperature file");
         return 0.0f;
     }
     float temp;
