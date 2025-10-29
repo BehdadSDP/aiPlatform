@@ -124,7 +124,10 @@ void Application::logConfiguration() const {
     LOG_INFO("Operation Mode: {}", (m_operationMode == 0 ? "Detection + Tracking" : "Detection Only"));
     if (m_operationMode == 0) {
         int trackerType = config_utils::getConfigInt(m_config, "tracking.tracker_type");
-        LOG_INFO("Tracker: {}", (trackerType == 0 ? "VitTracker" : "SiamFCPP"));
+        std::string trackerName = (trackerType == 0) ? "VitTracker" : 
+                                  (trackerType == 1) ? "SiamFCPP" : 
+                                  (trackerType == 2) ? "CSRT" : "Unknown";
+        LOG_INFO("Tracker: {}", trackerName);
         LOG_INFO("Path Visualization: {}", (m_showTrackingPath ? "Enabled" : "Disabled"));
     }
     
@@ -278,9 +281,15 @@ bool Application::initializeTracker() {
 
     TrackerConfig trackerConfig;
     trackerConfig.type = static_cast<TrackerType>(config_utils::getConfigInt(m_config, "tracking.tracker_type"));
-    trackerConfig.vitModelPath = config_utils::getConfigString(m_config, "detection_model.vittracker_model_path");
-    trackerConfig.siamfcFeatureModelPath = config_utils::getConfigString(m_config, "detection_model.siamfc_feature_model_path");
-    trackerConfig.siamfcTrackingModelPath = config_utils::getConfigString(m_config, "detection_model.siamfc_tracking_model_path");
+    
+    // Only load model paths for trackers that need them
+    if (trackerConfig.type == TrackerType::VIT_TRACKER) {
+        trackerConfig.vitModelPath = config_utils::getConfigString(m_config, "detection_model.vittracker_model_path");
+    } else if (trackerConfig.type == TrackerType::SIAMFC_TRACKER) {
+        trackerConfig.siamfcFeatureModelPath = config_utils::getConfigString(m_config, "detection_model.siamfc_feature_model_path");
+        trackerConfig.siamfcTrackingModelPath = config_utils::getConfigString(m_config, "detection_model.siamfc_tracking_model_path");
+    }
+    // CSRT tracker doesn't need model files
 
     auto tracker = TrackerManager::createTracker(trackerConfig);
     if (!tracker) {
@@ -477,15 +486,15 @@ void Application::trackingThread() {
 
 
             if (m_mavlink->current_flight_mode_ == 2){
-            // Check if vehicle is armed from heartbeat and arm if necessary
-            if (m_mavlink && m_mavlinkEnabled) {
-                if (!m_mavlink->isVehicleArmed()) {
-                    m_navigationUnit.armVehicle(true);
+                // Check if vehicle is armed from heartbeat and arm if necessary
+                if (m_mavlink && m_mavlinkEnabled) {
+                    if (!m_mavlink->isVehicleArmed()) {
+                        m_navigationUnit.armVehicle(true);
+                    }
                 }
-            }
-               // Calculate navigation error and generate control commands
-               cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
-               m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+                // Calculate navigation error and generate control commands
+                cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
+                m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
 
             }
 

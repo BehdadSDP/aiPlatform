@@ -1,6 +1,7 @@
 #include "include/tracker_manager.h"
 #include "include/tracking/vittracker.h"
 #include "include/tracking/siamfc_pp_tracker.h"
+#include "include/tracking/csrt_tracker.h"
 #include "include/logger.h"
 #include <iostream>
 #include <stdexcept>
@@ -19,6 +20,9 @@ std::unique_ptr<TrackerInterface> TrackerManager::createTracker(const TrackerCon
             }
             return tracker;
         }
+        
+        case TrackerType::CSRT_TRACKER:
+            return std::make_unique<CSRTTracker>();
             
         default:
             throw std::runtime_error("Unknown tracker type");

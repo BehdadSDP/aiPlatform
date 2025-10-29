@@ -45,8 +45,11 @@ similarity_threshold=0.7
 [tracking]
 mode=0
 interval=0
-# Tracker type: 0 for VitTracker, 1 for SiamFCPP tracker
-tracker_type= 0
+# Tracker type: 0=VitTracker (AI-based, needs model), 1=SiamFCPP (AI-based, needs models), 2=CSRT (OpenCV built-in, no model needed)
+# VitTracker: Vision Transformer tracker - accurate but slower, requires vittracker model
+# SiamFCPP: Siamese tracker - good balance, requires siamfc feature and tracking models
+# CSRT: Discriminative Correlation Filter - fast, robust, no model files needed (recommended for quick testing)
+tracker_type=2
 
 # Visualization settings
 [visualization]

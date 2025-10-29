@@ -223,10 +223,11 @@ private:
      * @param integral Reference to integral accumulator
      * @param previousError Reference to previous error storage
      * @param deltaTime Time since last update in seconds
+     * @param deadZone Dead zone threshold for the axis
      * @return PID controller output
      */
     float computePID(float error, float kp, float ki, float kd, 
-                     float& integral, float& previousError, float deltaTime);
+                     float& integral, float& previousError, float deltaTime, float deadZone);
 
     /**
      * @brief Applies low-pass filter (Exponential Moving Average) to smooth error values.

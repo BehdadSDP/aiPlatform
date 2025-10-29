@@ -143,10 +143,10 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
     if (frame.empty()) return;
 
     // Draw center point of camera frame
-    cv::Point frameCenter(frame.cols / 2, 2* (frame.rows / 3));
+    cv::Point frameCenter(frame.cols / 2.0f, frame.rows / 2.0f);
     cv::circle(frame, frameCenter, 5, cv::Scalar(255, 255, 255), -1); // White center point
     cv::circle(frame, frameCenter, 8, cv::Scalar(0, 0, 0), 2); // Black border
-
+    
     if (isTracking) {
         cv::rectangle(frame, trackedBox, cv::Scalar(0, 255, 0), 2);
         
@@ -155,18 +155,29 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
         cv::circle(frame, objectCenter, 5, cv::Scalar(0, 255, 0), -1); // Green center point
         cv::circle(frame, objectCenter, 8, cv::Scalar(0, 0, 0), 2); // Black border
         
+        // Draw centering tolerance zone - two horizontal lines around tracked object center
+        int halfCenteringRadius = static_cast<int>(centeringRadius / 2.0f);
+        int topBoundaryY = std::max(0, objectCenter.y - halfCenteringRadius);
+        int bottomBoundaryY = std::min(frame.rows - 1, objectCenter.y + halfCenteringRadius);
+        // Draw horizontal lines showing centering tolerance boundaries around tracked object
+        cv::line(frame, cv::Point(0, topBoundaryY), cv::Point(frame.cols - 1, topBoundaryY), 
+                 cv::Scalar(255, 0, 255), 2); // Magenta top boundary
+        cv::line(frame, cv::Point(0, bottomBoundaryY), cv::Point(frame.cols - 1, bottomBoundaryY), 
+                 cv::Scalar(255, 0, 255), 2); // Magenta bottom boundary
+                 
         // Draw tolerance circle around object center using the configured radius
-        cv::circle(frame, objectCenter, static_cast<int>(centeringRadius), cv::Scalar(255, 0, 255), 2); // Magenta circle
+        // cv::circle(frame, objectCenter, static_cast<int>(centeringRadius), cv::Scalar(255, 0, 255), 
+        // Magenta circle
         
         // Draw yaw dead zone - two vertical lines from camera frame center
         int halfDeadZone = static_cast<int>(yawDeadZoneWidth / 2.0f);
-        int leftBoundaryX = std::max(0, frameCenter.x - halfDeadZone);
-        int rightBoundaryX = std::min(frame.cols - 1, frameCenter.x + halfDeadZone);
+        int yawLeftBoundaryX = std::max(0, frameCenter.x - halfDeadZone);
+        int yawRightBoundaryX = std::min(frame.cols - 1, frameCenter.x + halfDeadZone);
         
         // Draw vertical lines showing yaw dead zone boundaries
-        cv::line(frame, cv::Point(leftBoundaryX, 0), cv::Point(leftBoundaryX, frame.rows - 1), 
+        cv::line(frame, cv::Point(yawLeftBoundaryX, 0), cv::Point(yawLeftBoundaryX, frame.rows - 1), 
                  cv::Scalar(255, 165, 0), 2); // Orange left boundary
-        cv::line(frame, cv::Point(rightBoundaryX, 0), cv::Point(rightBoundaryX, frame.rows - 1), 
+        cv::line(frame, cv::Point(yawRightBoundaryX, 0), cv::Point(yawRightBoundaryX, frame.rows - 1), 
                  cv::Scalar(255, 165, 0), 2); // Orange right boundary
         
         // Draw line between frame center and object center

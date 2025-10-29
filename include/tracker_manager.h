@@ -8,7 +8,8 @@
 
 enum class TrackerType {
     VIT_TRACKER = 0,
-    SIAMFC_TRACKER = 1
+    SIAMFC_TRACKER = 1,
+    CSRT_TRACKER = 2
 };
 
 struct TrackerConfig {
