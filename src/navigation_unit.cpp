@@ -172,6 +172,18 @@ ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error,
     
     m_lastUpdateTime = currentTime;
     
+    // Check if we're in the dead zone (both pitch and yaw within tolerance)
+    bool pitchInDeadZone = std::abs(filteredError.y) < (m_centeringRadius / 2.0f);
+    bool yawInDeadZone = std::abs(filteredError.x) < (m_yawDeadZoneWidth / 2.0f);
+    bool inDeadZone = pitchInDeadZone && yawInDeadZone;
+    
+    // Debug logging for dead zone detection
+    if (inDeadZone) {
+        LOG_DEBUG("IN DEADZONE - Pitch error: {:.1f} (limit: {:.1f}), Yaw error: {:.1f} (limit: {:.1f})", 
+                  filteredError.y, m_centeringRadius / 2.0f, 
+                  filteredError.x, m_yawDeadZoneWidth / 2.0f);
+    }
+    
     // Compute PID outputs using filtered error for roll and pitch
     float pitchPIDOutput = computePID(filteredError.y, m_pitchKp, m_pitchKi,m_pitchKd,
                                       m_pitchIntegral, m_pitchPreviousError, deltaTime, m_centeringRadius / 2.0f);
@@ -205,6 +217,7 @@ ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error,
     outputs.pitch_output = pitch_output;
     outputs.yaw_output = yaw_output;
     outputs.rc_commands_sent = true;
+    outputs.in_dead_zone = inDeadZone;  // Set the dead zone flag
     
     //sending RC override via MAVLink
     if (m_mavlink) {

@@ -33,12 +33,7 @@ void DetectionManager::runDetectionLoop(ModelManager& modelManager, std::atomic<
         std::vector<model::Detection> detections = modelManager.detect(frame);
         
         // Always visualize detections (whether empty or not, to show the model name)
-        // Use numbered visualization for manual selection strategy
-        if (selectionStrategy == 6) { // Manual selection strategy
-            visualizer_.visualizeDetectionsWithNumbers(frame, detections, modelManager.getClassNames(), modelManager.getModelName());
-        } else {
-            visualizer_.visualizeDetections(frame, detections, modelManager.getClassNames(), modelManager.getModelName());
-        }
+        visualizer_.visualizeDetections(frame, detections, modelManager.getClassNames(), modelManager.getModelName());
         
         if (!detections.empty()) {
             // ✅ OPTIMIZED: Use reference to avoid copying detection data
@@ -84,11 +79,8 @@ void DetectionManager::handleTrackerFailure(ControlUnit& controlUnit) {
         if (detectionFailure_.getCurrentStrategyId() == DetectionFailure::SIMILARITY) {
             updateSimilarityReference(lastFrame, lastBox);
             LOG_INFO("Tracker failure detected. Updated similarity reference for similarity strategy.");
-        } else if (detectionFailure_.getCurrentStrategyId() == DetectionFailure::MANUAL_SELECTION) {
-            // Reset manual selection state to allow new selection after tracker failure
-            detectionFailure_.resetManualSelectionState();
-            LOG_INFO("Tracker failure detected. Manual selection state reset. Ready for new object selection.");
-        } else {
+        }
+         else {
             LOG_INFO("Tracker failure detected. Using configured selection strategy: {}",
                      detectionFailure_.getCurrentStrategyName());
         }
@@ -115,12 +107,7 @@ void DetectionManager::processFrame(ModelManager& modelManager, ControlUnit& con
     const std::vector<std::string>& classNames = modelManager.getClassNames();
 
     // Visualize detections (draws on frame but doesn't display)
-    // Use numbered visualization for manual selection strategy
-    if (selectionStrategy == 6) { // Manual selection strategy
-        visualizer_.visualizeDetectionsWithNumbers(frame, detections, classNames, modelManager.getModelName());
-    } else {
-        visualizer_.visualizeDetections(frame, detections, classNames, modelManager.getModelName());
-    }
+    visualizer_.visualizeDetections(frame, detections, classNames, modelManager.getModelName());
 
     // Update detection frame for combined view only (no separate detection window)
     visualizer_.updateDetectionFrame(frame);

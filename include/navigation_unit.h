@@ -13,6 +13,7 @@ struct ControlOutputs {
     int pitch_output;
     int yaw_output;
     bool rc_commands_sent;  // Indicates if RC override commands were actually sent
+    bool in_dead_zone;      // Indicates if both pitch and yaw are in their dead zones
 };
 
 class NavigationUnit {
@@ -166,8 +167,8 @@ private:
     
     // PID gains for pitch axis
     float m_pitchKp = 0.10f;
-    float m_pitchKi = 1;
-    float m_pitchKd = 0.1f;
+    float m_pitchKi = 0.01f;
+    float m_pitchKd = 0.0f;
     
     // PID gains for yaw axis
     float m_yawKp = 0.02f;

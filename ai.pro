@@ -92,6 +92,7 @@ HEADERS += \
     include/tracker_manager.h \
     include/detection_manager.h \
     include/detection/yolo_detector.h \
+    include/detection/color_detector.h \
     include/frame_pool.h \
     include/mavlink.h \
     include/navigation_unit.h \

@@ -69,11 +69,13 @@ bool Application::initialize(const std::string& configPath) {
         float maxRCChangeRate = config_utils::getConfigFloat(m_config, "navigation.max_rc_change_rate");
         float filterAlpha = config_utils::getConfigFloat(m_config, "navigation.filter_alpha");
         float centeringRadius = config_utils::getConfigFloat(m_config, "navigation.centering_radius");
+        float yawDeadZoneWidth = config_utils::getConfigFloat(m_config, "navigation.yaw_dead_zone_width");
         m_navigationUnit.setMaxRCChangeRate(maxRCChangeRate);
         m_navigationUnit.setFilterAlpha(filterAlpha);
         m_navigationUnit.setCenteringRadius(centeringRadius);
-        LOG_INFO("Navigation control configured: Slew rate={} PWM/sec, Filter alpha={}, Centering radius={}px", 
-                 maxRCChangeRate, filterAlpha, centeringRadius);
+        m_navigationUnit.setYawDeadZoneWidth(yawDeadZoneWidth);
+        LOG_INFO("Navigation control configured: Slew rate={} PWM/sec, Filter alpha={}, Centering radius={}px, Yaw dead zone={}px", 
+                 maxRCChangeRate, filterAlpha, centeringRadius, yawDeadZoneWidth);
 
         m_controlUnit.setDetectionMode(config_utils::getConfigInt(m_config, "detection.mode"));
         m_controlUnit.setDetectionInterval(config_utils::getConfigInt(m_config, "detection.interval"));
@@ -381,33 +383,32 @@ void Application::modelsThread() {
         cv::Mat frame = frameData.image;
         if (frame.empty()) continue;
         
+        // Clone the clean frame BEFORE visualization for tracker initialization
+        cv::Mat cleanFrame = frame.clone();
+        
         // Run detection
         std::vector<model::Detection> detections = m_modelManager.detect(frame);
         
-        // Visualization - ALWAYS show first, especially for manual selection
+        // Visualization
         {
             std::lock_guard<std::mutex> lock(m_visMutex);
             
-            // Visualize detections with model name - use numbered visualization for manual selection
-            if (m_selectionStrategy == 6) { // Manual selection strategy
-                m_visualizer.visualizeDetectionsWithNumbers(frame, detections, m_modelManager.getClassNames(), m_modelManager.getModelName());
-            } else {
-                m_visualizer.visualizeDetections(frame, detections, m_modelManager.getClassNames(), m_modelManager.getModelName());
-            }
+            // Visualize detections with model name (draws on frame)
+            m_visualizer.visualizeDetections(frame, detections, m_modelManager.getClassNames(), m_modelManager.getModelName());
             
             // Update detection frame for combined view
             m_visualizer.updateDetectionFrame(frame);
             m_visualizer.showCombinedView();
         }
         
-        // Process detections for tracking - AFTER visualization is shown
+        // Process detections for tracking - Use clean frame for tracker initialization
         if (!detections.empty()) {
             cv::Rect selectedBox;
             float selectedConf;
             int selectedClassId;
             
             if (detectionManager.selectTarget(detections, selectedBox, selectedConf, selectedClassId)) {
-                m_controlUnit.setDetection(selectedBox, frame, frameData.sequence, selectedClassId);
+                m_controlUnit.setDetection(selectedBox, cleanFrame, frameData.sequence, selectedClassId);
             }
         }
         
@@ -467,10 +468,26 @@ void Application::trackingThread() {
                     m_controlUnit.setIsTracking(true);
                     m_controlUnit.setTrackerFailed(false);
                     m_controlUnit.markDetectionAsProcessed();
+                    LOG_INFO("Tracker initialized successfully with detected target (class: {})", newClassId);
+                    
+                    // Visualize the initialization frame
+                    {
+                        std::lock_guard<std::mutex> lock(m_visMutex);
+                        cv::Mat visFrame = newFrame.clone();
+                        m_visualizer.visualizeTracking(visFrame, true, newBox,
+                                                     newClassId, m_modelManager.getClassNames(),
+                                                     m_trackerManager.getTrackingPath(), nullptr, 0, false,
+                                                     m_navigationUnit.getCenteringRadius(),
+                                                     m_navigationUnit.getYawDeadZoneWidth());
+                        m_visualizer.updateTrackingFrame(visFrame);
+                        m_visualizer.showCombinedView();
+                    }
                 }
             } else {
                 m_controlUnit.markDetectionAsProcessed();
             }
+            // Skip the rest of this iteration - tracker will update on next frame
+            continue;
         }
 
         FrameData frameData;
@@ -483,9 +500,7 @@ void Application::trackingThread() {
 
         if (m_trackerManager.isTracking()) {
             m_trackerManager.update(frame);
-
-
-            if (m_mavlink->current_flight_mode_ == 2){
+            if (m_mavlink->current_flight_mode_ == 2){  // ALT_HOLD mode
                 // Check if vehicle is armed from heartbeat and arm if necessary
                 if (m_mavlink && m_mavlinkEnabled) {
                     if (!m_mavlink->isVehicleArmed()) {
@@ -499,9 +514,11 @@ void Application::trackingThread() {
             }
 
             if (!m_trackerManager.isTracking()) {
+                // Reset PID controller states when tracking is lost
+                m_navigationUnit.resetPIDStates();
                 m_controlUnit.setIsTracking(false);
                 m_controlUnit.setTrackerFailed(true, frame, m_trackerManager.getLastTrackBox());
-                LOG_WARN("Tracking lost - Re-enabling detection for re-initialization");
+                LOG_WARN("Tracking lost - PID reset, re-enabling detection for re-initialization");
             }
         }
 

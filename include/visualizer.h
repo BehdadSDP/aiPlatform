@@ -16,11 +16,6 @@ public:
     void visualizeDetections(cv::Mat& frame, const std::vector<model::Detection>& detections, 
                            const std::vector<std::string>& classNames,
                            const std::string& modelName = "");
-    
-    // Manual selection visualization with numbered boxes
-    void visualizeDetectionsWithNumbers(cv::Mat& frame, const std::vector<model::Detection>& detections, 
-                                      const std::vector<std::string>& classNames,
-                                      const std::string& modelName = "");
 
     // Tracking visualization
     void visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Rect& trackedBox, 

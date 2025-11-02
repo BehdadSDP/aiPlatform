@@ -14,8 +14,7 @@ public:
         LOWER_BOX = 2,
         RIGHTMOST_BOX = 3,
         LEFTMOST_BOX = 4,
-        SIMILARITY = 5,
-        MANUAL_SELECTION = 6
+        SIMILARITY = 5
     };
 
     DetectionFailure();
@@ -49,9 +48,6 @@ public:
     
     // Get strategy name by ID
     static std::string getStrategyName(int strategyId);
-    
-    // Reset manual selection state (called when tracker fails)
-    void resetManualSelectionState();
 
 private:
     // Selection strategy implementations
@@ -73,15 +69,6 @@ private:
     bool selectSimilarity(const std::vector<model::Detection>& detections,
                          cv::Rect& selectedBox, float& selectedConf, int& selectedClassId);
     
-    bool selectManual(const std::vector<model::Detection>& detections,
-                     cv::Rect& selectedBox, float& selectedConf, int& selectedClassId);
-    
-    // Non-blocking manual selection methods
-    bool hasManualSelection() const;
-    bool getManualSelection(cv::Rect& selectedBox, float& selectedConf, int& selectedClassId);
-    void processManualSelection(const std::vector<model::Detection>& detections);
-    void setManualSelection(int choice);
-    
     // Helper methods
     double calculateSimilarity(const cv::Mat& frame, const cv::Rect& box) const;
     
@@ -102,12 +89,4 @@ private:
     double appearanceWeight_;
     double sizeWeight_;
     double maxExpectedMovement_;  // Maximum expected movement in pixels
-    
-    // Manual selection state
-    std::vector<model::Detection> pendingDetections_;
-    bool hasPendingSelection_;
-    int selectedChoice_;
-    cv::Rect selectedBox_;
-    float selectedConf_;
-    int selectedClassId_;
 }; 

@@ -11,9 +11,7 @@ DetectionFailure::DetectionFailure()
       spatialWeight_(0.4),      // Spatial position is important for tracking
       appearanceWeight_(0.4),   // Appearance similarity is also important
       sizeWeight_(0.2),         // Size should be relatively stable
-      maxExpectedMovement_(100.0),  // Maximum expected movement in pixels
-      hasPendingSelection_(false),
-      selectedChoice_(-1) {
+      maxExpectedMovement_(100.0) {  // Maximum expected movement in pixels
 }
 
 void DetectionFailure::setSelectionStrategy(int strategyId) {
@@ -43,8 +41,6 @@ bool DetectionFailure::selectTarget(const std::vector<model::Detection>& detecti
             return selectLeftmostBox(detections, selectedBox, selectedConf, selectedClassId);
         case SIMILARITY:
             return selectSimilarity(detections, selectedBox, selectedConf, selectedClassId);
-        case MANUAL_SELECTION:
-            return selectManual(detections, selectedBox, selectedConf, selectedClassId);
         default:
             return selectHighestConfidence(detections, selectedBox, selectedConf, selectedClassId);
     }
@@ -396,114 +392,6 @@ void DetectionFailure::setSimilarityThreshold(double threshold) {
     std::cout << "Similarity threshold set to: " << similarityThreshold_ << std::endl;
 }
 
-bool DetectionFailure::selectManual(const std::vector<model::Detection>& detections,
-                                   cv::Rect& selectedBox, float& selectedConf, int& selectedClassId) {
-    if (detections.empty()) {
-        return false;
-    }
-    
-    // Filter detections with confidence > 0.15
-    std::vector<model::Detection> validDetections;
-    for (const auto& det : detections) {
-        if (det.confidence > 0.15f) {
-            validDetections.push_back(det);
-        }
-    }
-    
-    if (validDetections.empty()) {
-        return false;
-    }
-    
-    // Always require manual selection, even for single objects
-    // This gives the user full control over what gets tracked
-    
-    // For multiple detections, use non-blocking approach
-    processManualSelection(validDetections);
-    
-    // Check if user has made a selection
-    if (hasManualSelection()) {
-        return getManualSelection(selectedBox, selectedConf, selectedClassId);
-    }
-    
-    // No selection made yet, return false to continue detection
-    return false;
-}
-
-void DetectionFailure::processManualSelection(const std::vector<model::Detection>& detections) {
-    pendingDetections_ = detections;
-    
-    // Only show prompt if no selection is pending and we haven't shown it recently
-    static bool promptShown = false;
-    static auto lastPromptTime = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    auto timeSinceLastPrompt = std::chrono::duration_cast<std::chrono::seconds>(now - lastPromptTime);
-    
-    if (!hasPendingSelection_ && (!promptShown || timeSinceLastPrompt.count() > 2)) {
-        // Display numbered options to user
-        std::cout << "\n=== MANUAL OBJECT SELECTION ===" << std::endl;
-        if (detections.size() == 1) {
-            std::cout << "Object detected. Please confirm to track it:" << std::endl;
-        } else {
-            std::cout << "Multiple objects detected. Please select which object to track:" << std::endl;
-        }
-        std::cout << "Look at the video window to see the numbered bounding boxes." << std::endl;
-        std::cout << "Enter object number (1-" << detections.size() << ") when ready: ";
-        
-        promptShown = true;
-        lastPromptTime = now;
-        
-        // Start a background thread to read input
-        std::thread inputThread([this]() {
-            int choice;
-            std::cin >> choice;
-            setManualSelection(choice);
-        });
-        inputThread.detach(); // Detach to run in background
-    }
-}
-
-bool DetectionFailure::hasManualSelection() const {
-    return hasPendingSelection_;
-}
-
-bool DetectionFailure::getManualSelection(cv::Rect& selectedBox, float& selectedConf, int& selectedClassId) {
-    if (!hasPendingSelection_ || selectedChoice_ < 1 || selectedChoice_ > static_cast<int>(pendingDetections_.size())) {
-        return false;
-    }
-    
-    const auto& selectedDet = pendingDetections_[selectedChoice_ - 1];
-    selectedBox = selectedDet.box;
-    selectedConf = selectedDet.confidence;
-    selectedClassId = selectedDet.classId;
-    
-    std::cout << "Selected object " << selectedChoice_ << " with confidence " 
-              << std::fixed << std::setprecision(1) << (selectedConf * 100) << "%" << std::endl;
-    
-    // Reset selection state
-    hasPendingSelection_ = false;
-    selectedChoice_ = -1;
-    pendingDetections_.clear();
-    
-    return true;
-}
-
-void DetectionFailure::setManualSelection(int choice) {
-    if (choice >= 1 && choice <= static_cast<int>(pendingDetections_.size())) {
-        selectedChoice_ = choice;
-        hasPendingSelection_ = true;
-        std::cout << "\nSelection received: " << choice << std::endl;
-    } else {
-        std::cout << "\nInvalid selection: " << choice << ". Please enter a number between 1 and " 
-                  << pendingDetections_.size() << std::endl;
-    }
-}
-
-void DetectionFailure::resetManualSelectionState() {
-    hasPendingSelection_ = false;
-    selectedChoice_ = -1;
-    pendingDetections_.clear();
-}
-
 std::string DetectionFailure::getStrategyName(int strategyId) {
     switch (strategyId) {
         case HIGHEST_CONFIDENCE: return "Highest Confidence";
@@ -512,7 +400,6 @@ std::string DetectionFailure::getStrategyName(int strategyId) {
         case RIGHTMOST_BOX: return "Rightmost Box";
         case LEFTMOST_BOX: return "Leftmost Box";
         case SIMILARITY: return "Similarity";
-        case MANUAL_SELECTION: return "Manual Selection";
         default: return "Unknown Strategy";
     }
 }

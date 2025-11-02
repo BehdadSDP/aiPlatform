@@ -49,12 +49,12 @@ interval=0
 # VitTracker: Vision Transformer tracker - accurate but slower, requires vittracker model
 # SiamFCPP: Siamese tracker - good balance, requires siamfc feature and tracking models
 # CSRT: Discriminative Correlation Filter - fast, robust, no model files needed (recommended for quick testing)
-tracker_type=2
+tracker_type=1
 
 # Visualization settings
 [visualization]
 # Enable path tracing: 0=disabled, 1=enabled
-show_tracking_path=1
+show_tracking_path=0
 # Maximum path points to store (default: 50)
 max_path_points=50
 
@@ -107,6 +107,8 @@ filter_alpha=0.1
 # Higher values = looser centering tolerance (60-100 for easier)
 # Typical range: 30-100
 centering_radius=250
+# Yaw dead zone width in pixels (default: 100)
+yaw_dead_zone_width=100
 
 # Detection model configuration
 [detection_model]

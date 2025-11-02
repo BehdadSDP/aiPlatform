@@ -51,87 +51,6 @@ void Visualizer::visualizeDetections(cv::Mat& frame, const std::vector<model::De
     }
 }
 
-void Visualizer::visualizeDetectionsWithNumbers(cv::Mat& frame, const std::vector<model::Detection>& detections, 
-                                               const std::vector<std::string>& classNames,
-                                               const std::string& modelName) {
-    if (frame.empty()) return;
-
-    // Create black background bar at the top for model information
-    int barHeight = 40;
-    cv::rectangle(frame, cv::Point(0, 0), cv::Point(frame.cols, barHeight), cv::Scalar(0, 0, 0), -1);
-    
-    // Display model name if provided
-    if (!modelName.empty()) {
-        float fontSize = 0.7;
-        int fontThickness = 2;
-        std::string modelText = "Model: " + modelName;
-        cv::putText(frame, modelText, cv::Point(10, 28), cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(255, 255, 255), fontThickness);
-    }
-
-    // Filter detections with confidence > 0.15 and add numbers
-    std::vector<model::Detection> validDetections;
-    for (const auto& det : detections) {
-        if (det.confidence > 0.15f) {
-            validDetections.push_back(det);
-        }
-    }
-
-    for (size_t i = 0; i < validDetections.size(); ++i) {
-        const auto& det = validDetections[i];
-        
-        std::string className = (det.classId >= 0 && det.classId < static_cast<int>(classNames.size())) ?
-                               classNames[det.classId] : "Unknown";
-        
-        cv::Scalar boxColor = getClassColor(className);
-        std::string statusText = getStatusText(className);
-        
-        // Draw bounding box with thicker border for visibility
-        cv::rectangle(frame, det.box, boxColor, 3);
-
-        // Create label with number
-        std::string label = "[" + std::to_string(i + 1) + "] " + className + ": " + 
-                           std::to_string(int(det.confidence * 100)) + "%" + statusText;
-
-        int baseline = 0;
-        cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.6, 2, &baseline);
-        cv::rectangle(frame,
-                     cv::Point(det.box.x, det.box.y - textSize.height - 10),
-                     cv::Point(det.box.x + textSize.width, det.box.y),
-                     boxColor, -1);
-
-        cv::putText(frame, label,
-                   cv::Point(det.box.x, det.box.y - 5),
-                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(255, 255, 255), 2);
-        
-        // Draw large number in the center of the bounding box
-        std::string numberText = std::to_string(i + 1);
-        cv::Size numberSize = cv::getTextSize(numberText, cv::FONT_HERSHEY_SIMPLEX, 2.0, 4, &baseline);
-        cv::Point numberPos(det.box.x + det.box.width/2 - numberSize.width/2, 
-                           det.box.y + det.box.height/2 + numberSize.height/2);
-        
-        // Draw number with background circle
-        cv::circle(frame, cv::Point(det.box.x + det.box.width/2, det.box.y + det.box.height/2), 
-                  numberSize.width + 10, cv::Scalar(0, 0, 0), -1);
-        cv::circle(frame, cv::Point(det.box.x + det.box.width/2, det.box.y + det.box.height/2), 
-                  numberSize.width + 10, cv::Scalar(255, 255, 255), 3);
-        cv::putText(frame, numberText, numberPos, cv::FONT_HERSHEY_SIMPLEX, 2.0, cv::Scalar(255, 255, 255), 4);
-    }
-    
-    // Add instruction text at the bottom
-    if (!validDetections.empty()) {
-        std::string instructionText = "MANUAL SELECTION MODE - Check console for selection prompt";
-        int baseline = 0;
-        cv::Size instructionSize = cv::getTextSize(instructionText, cv::FONT_HERSHEY_SIMPLEX, 0.8, 2, &baseline);
-        cv::rectangle(frame, 
-                     cv::Point(frame.cols/2 - instructionSize.width/2 - 10, frame.rows - 40),
-                     cv::Point(frame.cols/2 + instructionSize.width/2 + 10, frame.rows - 5),
-                     cv::Scalar(0, 0, 0), -1);
-        cv::putText(frame, instructionText, 
-                   cv::Point(frame.cols/2 - instructionSize.width/2, frame.rows - 15),
-                   cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 255, 255), 2);
-    }
-}
-
 void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Rect& trackedBox, 
                                    int trackedClassId, const std::vector<std::string>& classNames,
                                    const std::vector<cv::Point>& trackingPath,
@@ -206,9 +125,9 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
                        cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(0, 255, 0), fontThickness);
             xPos += cv::getTextSize(statusLine, cv::FONT_HERSHEY_SIMPLEX, fontSize, fontThickness, nullptr).width + 20;
             
-            // Flight mode
+            // Flight mode (highlight ALT_HOLD in green as it's the tracking mode)
             std::string flightModeText = "Mode: " + getFlightModeName(flightMode);
-            cv::Scalar flightModeColor = (flightMode == 2) ? cv::Scalar(0, 255, 0) : cv::Scalar(200, 200, 200);
+            cv::Scalar flightModeColor = (flightMode == 2) ? cv::Scalar(0, 255, 0) : cv::Scalar(200, 200, 200);  // Green for ALT_HOLD
             cv::putText(frame, flightModeText, cv::Point(xPos, 28),
                        cv::FONT_HERSHEY_SIMPLEX, fontSize, flightModeColor, fontThickness);
             xPos += cv::getTextSize(flightModeText, cv::FONT_HERSHEY_SIMPLEX, fontSize, fontThickness, nullptr).width + 20;
@@ -221,16 +140,27 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
         
         // Display control outputs if available
         if (controlOutputs) {
-            // RC command status
-            std::string rcStatusText = controlOutputs->rc_commands_sent ? "RC: ACTIVE" : "RC: SUPPRESSED";
-            cv::Scalar rcStatusColor = controlOutputs->rc_commands_sent ? cv::Scalar(0, 255, 255) : cv::Scalar(0, 255, 0);
+            // RC command status - show DEADZONE when in overlap zone
+            std::string rcStatusText;
+            cv::Scalar rcStatusColor;
+            
+            if (controlOutputs->in_dead_zone) {
+                rcStatusText = "RC: DEADZONE";
+                rcStatusColor = cv::Scalar(0, 255, 0);  // Green for dead zone
+            } else if (controlOutputs->rc_commands_sent) {
+                rcStatusText = "RC: ACTIVE";
+                rcStatusColor = cv::Scalar(0, 255, 255);  // Cyan for active
+            } else {
+                rcStatusText = "RC: SUPPRESSED";
+                rcStatusColor = cv::Scalar(0, 255, 0);  // Green for suppressed
+            }
+            
             cv::putText(frame, rcStatusText, cv::Point(xPos, 28),
                        cv::FONT_HERSHEY_SIMPLEX, fontSize, rcStatusColor, fontThickness);
             xPos += cv::getTextSize(rcStatusText, cv::FONT_HERSHEY_SIMPLEX, fontSize, fontThickness, nullptr).width + 20;
             
-            // Control outputs
-            std::string controlText = "Roll: " + std::to_string(controlOutputs->roll_output) + 
-                                    " Pitch: " + std::to_string(controlOutputs->pitch_output) +
+            // Control outputs (removed roll, only pitch and yaw)
+            std::string controlText = "Pitch: " + std::to_string(controlOutputs->pitch_output) +
                                     " Yaw: " + std::to_string(controlOutputs->yaw_output);
             cv::putText(frame, controlText, cv::Point(xPos, 28),
                        cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(255, 255, 0), fontThickness);
