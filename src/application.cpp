@@ -335,6 +335,7 @@ void Application::run() {
     std::thread yoloThread(&Application::modelsThread, this);
 
     std::thread trackerThread;
+    std::thread navThread;
     if (m_operationMode == 0) {
         m_detectionFailure.setSelectionStrategy(m_selectionStrategy);
         
@@ -352,14 +353,23 @@ void Application::run() {
         }
         
         trackerThread = std::thread(&Application::trackingThread, this);
+        
+        // Start navigation control thread if MAVLink is enabled
+        if (m_mavlinkEnabled) {
+            navThread = std::thread(&Application::navigationThread, this);
+            LOG_INFO("Navigation control thread started");
+        }
     }
 
     // ✅ FIX: Cleaner thread management
     yoloThread.join();
     
-    // Only join tracking thread if it was created (Mode 0)
+    // Only join tracking and navigation threads if they were created (Mode 0)
     if (m_operationMode == 0) {
         trackerThread.join();
+        if (m_mavlinkEnabled && navThread.joinable()) {
+            navThread.join();
+        }
     }
 }
 
@@ -500,39 +510,12 @@ void Application::trackingThread() {
 
         if (m_trackerManager.isTracking()) {
             m_trackerManager.update(frame);
-            if (m_mavlink->current_flight_mode_ == 2){  // ALT_HOLD mode
-                // Check if vehicle is armed from heartbeat and arm if necessary
-                if (m_mavlink && m_mavlinkEnabled) {
-                    if (!m_mavlink->isVehicleArmed()) {
-                        m_navigationUnit.armVehicle(true);
-                    }
-                }
-                // Calculate navigation error and generate control commands
-                cv::Point2f rawError = m_navigationUnit.calculateError(m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
-                m_navigationUnit.generateControlCommands(rawError, m_trackerManager.getLastTrackBox(), frame.cols, frame.rows);
-
-            }
 
             if (!m_trackerManager.isTracking()) {
-                // Reset PID controller states when tracking is lost
-                m_navigationUnit.resetPIDStates();
+                // Tracking lost - let navigation thread handle PID reset
                 m_controlUnit.setIsTracking(false);
                 m_controlUnit.setTrackerFailed(true, frame, m_trackerManager.getLastTrackBox());
-                LOG_WARN("Tracking lost - PID reset, re-enabling detection for re-initialization");
-            }
-        }
-
-        // Process incoming MAVLink messages
-        if (m_mavlink && m_mavlinkEnabled) {
-            m_mavlink->processIncomingMessages();
-            
-            // Log altitude data periodically (every ~100 frames to avoid spam)
-            static int altLogCounter = 0;
-            if (++altLogCounter >= 100) {
-                float altitude = m_mavlink->getCurrentAltitudeMSL();
-                float climbRate = m_mavlink->getCurrentClimbRate();
-                LOG_INFO("Current altitude: {} m, Climb rate: {} m/s", altitude, climbRate);
-                altLogCounter = 0;
+                LOG_WARN("Tracking lost - re-enabling detection for re-initialization");
             }
         }
 
@@ -637,6 +620,118 @@ bool Application::initializeMAVLink() {
     }
 
     return true;
+}
+
+/*
+@brief
+Navigation control thread - Runs at fixed control rate independent of tracking/detection
+Handles:
+- Vehicle arming when in appropriate flight mode
+- Navigation error calculation from tracking data
+- PID control command generation and reset
+- MAVLink message processing
+- Tracking state monitoring for navigation purposes
+*/
+void Application::navigationThread() {
+    LOG_INFO("Navigation control thread started");
+    
+    // Control loop rate (50 Hz = 20ms period for smooth control)
+    const std::chrono::milliseconds controlPeriod(20);
+    
+    // Counter for periodic logging to avoid spam
+    int logCounter = 0;
+    const int logInterval = 250; // Log every 5 seconds (250 * 20ms)
+    
+    // Track previous tracking state to detect transitions
+    bool wasTracking = false;
+    
+    while (m_running) {
+        auto loopStart = std::chrono::steady_clock::now();
+        
+        // Process incoming MAVLink messages (non-blocking)
+        if (m_mavlink && m_mavlinkEnabled) {
+            m_mavlink->processIncomingMessages();
+        }
+        
+        bool currentlyTracking = m_trackerManager.isTracking();
+        bool trackerFailed = m_controlUnit.hasTrackerFailed();
+        
+        // Detect tracking lost transition and reset PID
+        if (wasTracking && !currentlyTracking) {
+            m_navigationUnit.resetPIDStates();
+            LOG_WARN("Navigation: Tracking lost detected - PID states reset");
+            logCounter = 0; // Reset counter for immediate logging when tracking resumes
+        }
+        
+        // Stop sending commands if tracker has failed
+        if (trackerFailed && currentlyTracking) {
+            LOG_WARN("Navigation: Tracker failed - control commands suspended");
+            logCounter = 0;
+        }
+        
+        // Only send control commands if actively tracking AND tracker hasn't failed
+        if (currentlyTracking && !trackerFailed) {
+            // Get latest frame dimensions and tracking box
+            FrameData frameData;
+            if (FrameBufferManager::getInstance().getLatestFrame(frameData)) {
+                cv::Mat frame = frameData.image;
+                
+                if (!frame.empty() && m_mavlink && m_mavlinkEnabled) {
+                    uint32_t flightMode = m_mavlink->getCurrentFlightMode();
+                    
+                    // Only control in ALT_HOLD mode (mode 2)
+                    if (flightMode == 2) {
+                        // Check if vehicle is armed and arm if necessary
+                        if (!m_mavlink->isVehicleArmed()) {
+                            m_navigationUnit.armVehicle(true);
+                            LOG_INFO("Arming vehicle for navigation control");
+                        }
+                        
+                        // Get current tracking box
+                        cv::Rect trackBox = m_trackerManager.getLastTrackBox();
+                        
+                        // Calculate navigation error
+                        cv::Point2f rawError = m_navigationUnit.calculateError(
+                            trackBox, frame.cols, frame.rows
+                        );
+                        
+                        // Generate and send control commands
+                        m_navigationUnit.generateControlCommands(
+                            rawError, trackBox, frame.cols, frame.rows
+                        );
+                        
+                        // Periodic logging (avoid spamming)
+                        if (++logCounter >= logInterval) {
+                            float altitude = m_mavlink->getCurrentAltitudeMSL();
+                            float climbRate = m_mavlink->getCurrentClimbRate();
+                            LOG_DEBUG("Nav: Alt={:.1f}m, Climb={:.2f}m/s, Error=({:.1f},{:.1f})", 
+                                     altitude, climbRate, rawError.x, rawError.y);
+                            logCounter = 0;
+                        }
+                    } else {
+                        // Not in control mode - reset counter
+                        logCounter = 0;
+                    }
+                }
+            }
+        } else {
+            // Not tracking - reset counter
+            logCounter = 0;
+        }
+        
+        // Update tracking state for next iteration
+        wasTracking = currentlyTracking;
+        
+        // Sleep to maintain control rate
+        auto loopEnd = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(loopEnd - loopStart);
+        
+        if (elapsed < controlPeriod) {
+            std::this_thread::sleep_for(controlPeriod - elapsed);
+        }
+    }
+    
+    LOG_INFO("Navigation control thread stopped");
 }
 
 void Application::cleanup() {

@@ -38,6 +38,7 @@ private:
 
     void modelsThread();
     void trackingThread();
+    void navigationThread();
     void cleanup();
 
     static std::atomic<bool> m_running;
