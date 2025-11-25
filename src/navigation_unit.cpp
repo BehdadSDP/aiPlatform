@@ -222,7 +222,7 @@ ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error,
     //sending RC override via MAVLink
     if (m_mavlink) {
         channels[1] = pitch_output;   // Pitch (Channel 2)
-        channels[3] = yaw_output;     // Yaw (Channel 4)
+       //channels[3] = yaw_output;     // Yaw (Channel 4)
 
         LOG_DEBUG("Sending RC override - Pitch: {}, Yaw: {}", 
                   pitch_output, yaw_output);

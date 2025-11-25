@@ -49,7 +49,7 @@ interval=0
 # VitTracker: Vision Transformer tracker - accurate but slower, requires vittracker model
 # SiamFCPP: Siamese tracker - good balance, requires siamfc feature and tracking models
 # CSRT: Discriminative Correlation Filter - fast, robust, no model files needed (recommended for quick testing)
-tracker_type=2
+tracker_type=0
 
 # Visualization settings
 [visualization]
@@ -106,7 +106,7 @@ filter_alpha=0.1
 # Lower values = tighter centering requirement (30-40 for precise)
 # Higher values = looser centering tolerance (60-100 for easier)
 # Typical range: 30-100
-centering_radius=250
+centering_radius=200
 # Yaw dead zone width in pixels (default: 100)
 yaw_dead_zone_width=100
 
@@ -135,7 +135,7 @@ siamfc_tracking_model_path=/home/pi5/shared_folder/aiPlatform/models/siamfc_pp_t
 # Color detection configuration (used when model_type=3)
 [color_detection]
 # Comma-separated list of colors to detect: red, blue, green, yellow, orange, purple
-target_colors=green
+target_colors=blue
 # Minimum contour area to detect (pixels squared)
 min_area=500
 # Maximum contour area to detect (pixels squared)

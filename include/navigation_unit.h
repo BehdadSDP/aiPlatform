@@ -166,8 +166,8 @@ private:
     float m_rollKd = 0.05f;
     
     // PID gains for pitch axis
-    float m_pitchKp = 0.10f;
-    float m_pitchKi = 0.01f;
+    float m_pitchKp = 0.1f;
+    float m_pitchKi = 1.0f;
     float m_pitchKd = 0.0f;
     
     // PID gains for yaw axis
