@@ -2,6 +2,7 @@
 #include "include/logger.h"
 #include <iostream>
 #include <cstring>
+#include <cmath>
 #include <errno.h>
 #include <unistd.h>
 #include <cstdio>
@@ -173,6 +174,18 @@ bool Mavlink::takeoff(float altitude, double latitude, double longitude)
     );
 }
 
+bool Mavlink::setFlightMode(uint32_t mode)
+{
+    LOG_INFO("Setting flight mode to: {}", mode);
+    
+    return sendCommandLong(
+        MAV_CMD_DO_SET_MODE,
+        1.0f,  // param1: mode (MAV_MODE_FLAG_CUSTOM_MODE_ENABLED)
+        static_cast<float>(mode),  // param2: custom mode number
+        0.0f, 0.0f, 0.0f, 0.0f, 0.0f
+    );
+}
+
 bool Mavlink::land(double latitude, double longitude)
 {
     std::cout << "Requesting landing" << std::endl;
@@ -285,6 +298,85 @@ bool Mavlink::sendRCOverride(const uint16_t channels[18])
     
     if (!result) {
         std::cerr << "❌ Failed to send RC override command" << std::endl;
+    }
+    
+    return result;
+}
+
+bool Mavlink::sendAttitudeTarget(float roll_rate, float pitch_rate, float yaw_rate, float thrust,
+                                 bool use_rates, float roll, float pitch, float yaw)
+{
+    if (!uart_initialized_) {
+        LOG_ERROR("Cannot send attitude target - UART not initialized");
+        return false;
+    }
+    
+    if (!running_) {
+        LOG_ERROR("Cannot send attitude target - MAVLink not running");
+        return false;
+    }
+    
+    mavlink_message_t msg;
+    memset(&msg, 0, sizeof(msg));
+    
+    // Get current timestamp in milliseconds
+    uint32_t time_boot_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    
+    // Prepare quaternion (identity quaternion if using rates)
+    float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};  // w, x, y, z
+    
+    if (!use_rates) {
+        // Convert Euler angles to quaternion
+        float cy = cos(yaw * 0.5f);
+        float sy = sin(yaw * 0.5f);
+        float cp = cos(pitch * 0.5f);
+        float sp = sin(pitch * 0.5f);
+        float cr = cos(roll * 0.5f);
+        float sr = sin(roll * 0.5f);
+        
+        q[0] = cr * cp * cy + sr * sp * sy;  // w
+        q[1] = sr * cp * cy - cr * sp * sy;  // x
+        q[2] = cr * sp * cy + sr * cp * sy;  // y
+        q[3] = cr * cp * sy - sr * sp * cy;  // z
+    }
+    
+    // Type mask to indicate which fields to ignore
+    // According to ArduPilot docs: should always be 0x07 (0b00000111)
+    // bit1: body roll rate (ignore)
+    // bit2: body pitch rate (ignore)  
+    // bit3: body yaw rate (ignore)
+    // bit7: throttle (use it)
+    // bit8: attitude/quaternion (use it)
+    // Note: ArduPilot does NOT support body rates in SET_ATTITUDE_TARGET
+    uint8_t type_mask = 0x07;  // Always ignore body rates, use quaternion attitude
+    
+    // Thrust body frame [forward, right, down] - not used, set to zero
+    float thrust_body[3] = {0.0f, 0.0f, 0.0f};
+    
+    mavlink_msg_set_attitude_target_pack(
+        system_id_,
+        component_id_,
+        &msg,
+        time_boot_ms,
+        target_system_id_,
+        MAV_COMP_ID_AUTOPILOT1,
+        type_mask,
+        q,            // Quaternion [w, x, y, z]
+        roll_rate,    // Body roll rate in rad/s
+        pitch_rate,   // Body pitch rate in rad/s
+        yaw_rate,     // Body yaw rate in rad/s
+        thrust,       // Collective thrust (0.0 to 1.0)
+        thrust_body   // 3D thrust in body frame (not used)
+    );
+    
+    bool result = sendMessageImmediate(msg);
+    
+    if (result) {
+        LOG_DEBUG("Attitude target sent - Roll rate: {:.3f}, Pitch rate: {:.3f}, Yaw rate: {:.3f}, Thrust: {:.3f}", 
+                  roll_rate, pitch_rate, yaw_rate, thrust);
+    } else {
+        LOG_ERROR("Failed to send attitude target");
     }
     
     return result;

@@ -15,6 +15,11 @@
 #include <string>
 #include <map>
 #include <mutex>
+#include <functional>
+#include <opencv2/opencv.hpp>
+
+// Forward declaration
+class MainWindow;
 
 class Application {
 public:
@@ -23,11 +28,21 @@ public:
 
     bool initialize(const std::string& configPath);
     void run();
+    void stop();
+    
+    // UI Integration
+    void setMainWindow(MainWindow* window);
+    void startThreads();
+    void stopThreads();
+    
+    // MAVLink Commands
+    bool takeoff(float altitude);
+    bool land();
+    bool setFlightMode(uint32_t mode);
 
 private:
     void setupSignalHandler();
     static void signalHandler(int signum);
-
     bool loadConfiguration(const std::string& configPath);
     void logConfiguration() const;
     bool initializeInputSource();
@@ -35,7 +50,6 @@ private:
     bool initializeTracker();
     void initializeFrameBuffer();
     bool initializeMAVLink();
-
     void modelsThread();
     void trackingThread();
     void navigationThread();
@@ -60,6 +74,10 @@ private:
     int m_selectionStrategy;
     bool m_mavlinkEnabled;
     std::string m_sessionFolder;  // Timestamped folder for current session
+    
+    // UI Integration
+    MainWindow* m_mainWindow;
+    std::atomic<bool> m_threadsRunning;
 };
 
 #endif // APPLICATION_H 

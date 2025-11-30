@@ -671,4 +671,3 @@ void CameraHandler::cleanupMappedBuffers() {
     }
     mappedBuffers_.clear();
 }
-

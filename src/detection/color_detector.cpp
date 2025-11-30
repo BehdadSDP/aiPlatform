@@ -105,3 +105,11 @@ std::vector<model::Detection> ColorDetector::createDetectionsFromMask(
 
     return detections;
 }
+
+std::vector<std::string> ColorDetector::getClassNames() const {
+    std::vector<std::string> names;
+    for (const auto& range : m_config.colorRanges) {
+        names.push_back(range.name);
+    }
+    return names;
+}

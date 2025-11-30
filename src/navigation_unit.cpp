@@ -194,42 +194,48 @@ ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error,
 
     m_firstUpdate = false;
     
-    // Convert PID outputs to RC commands (1000-2000)
-    const int neutral = 1500;
-    const int max_deviation = 200;  // Reduced from 200 to 100 for smoother response
-
-    uint16_t channels[18] = {0};
-
-    // Apply PID outputs to neutral position
-    int pitch_output_desired = static_cast<int>(neutral + pitchPIDOutput);
-    int yaw_output_desired = static_cast<int>(neutral + yawPIDOutput);
+    // Convert PID outputs to attitude angles (radians)
+    // PID output is in arbitrary units, scale to very small angles
+    // Without gimbal, large angles will move camera view and lose tracking
+    // Max angle of ±5 degrees = ±0.087 radians (small angle for camera stability)
+    const float max_angle = 0.087f;  // radians (~5 degrees)
+    const float pid_scale = 0.00005f;  // Scale factor: adjust based on PID tuning
     
-    // Clamp the desired values to a safe range
-    int pitch_output = std::clamp(pitch_output_desired, neutral - max_deviation, neutral + max_deviation);
-    int yaw_output = std::clamp(yaw_output_desired, neutral - max_deviation, neutral + max_deviation);
+    // Note: Pitch is inverted because in ArduPilot:
+    // - Positive pitch = nose UP = backward movement
+    // - Negative pitch = nose DOWN = forward movement
+    // But our error convention is: positive error = object above center = want to move forward
+    // Therefore we need to invert the pitch angle
+    float pitch_angle = -pitchPIDOutput * pid_scale;  // Inverted for correct direction
+    float yaw_angle = yawPIDOutput * pid_scale;
     
-    // Update previous outputs for next iteration
-    m_previousPitchOutput = pitch_output;
-    m_previousYawOutput = yaw_output;
-    m_firstOutputUpdate = false;
-
-    // Store outputs for debugging
-    outputs.pitch_output = pitch_output;
-    outputs.yaw_output = yaw_output;
+    // Clamp angles to safe limits
+    pitch_angle = std::clamp(pitch_angle, -max_angle, max_angle);
+    yaw_angle = std::clamp(yaw_angle, -max_angle, max_angle);
+    
+    // Store outputs as angles (in radians)
+    outputs.pitch_output = static_cast<int>(pitch_angle * 1000);  // Store as milliradians for integer storage
+    outputs.yaw_output = static_cast<int>(yaw_angle * 1000);      // Store as milliradians for integer storage
     outputs.rc_commands_sent = true;
-    outputs.in_dead_zone = inDeadZone;  // Set the dead zone flag
+    outputs.in_dead_zone = inDeadZone;
     
-    //sending RC override via MAVLink
+    // Send attitude target via MAVLink
     if (m_mavlink) {
-        channels[1] = pitch_output;   // Pitch (Channel 2)
-       //channels[3] = yaw_output;     // Yaw (Channel 4)
-
-        LOG_DEBUG("Sending RC override - Pitch: {}, Yaw: {}", 
-                  pitch_output, yaw_output);
+        // Use attitude control mode (use_rates = false)
+        // ArduPilot does NOT support body rates in SET_ATTITUDE_TARGET
+        // Must use quaternion attitude control instead
+        float roll_angle = 0.0f;  // No roll
+        float thrust = 0.5f;      // 0.5 = maintain altitude (if GUID_OPTIONS=0)
         
-        (void)m_mavlink->sendRCOverride(channels);
+        // Testing: Only pitch control, yaw disabled
+        float test_yaw = 0.0f;
+        
+        LOG_DEBUG("Sending attitude target - Pitch: {:.3f} rad, Yaw: {:.3f} rad (disabled)", 
+                  pitch_angle, test_yaw);
+        
+        (void)m_mavlink->sendAttitudeTarget(0.0f, 0.0f, 0.0f, thrust, false, roll_angle, pitch_angle, test_yaw);
     } else {
-        LOG_ERROR("NavigationUnit: MAVLink system not set, cannot send RC override");
+        LOG_ERROR("NavigationUnit: MAVLink system not set, cannot send attitude target");
     }
 
     // Store last outputs for retrieval
@@ -269,7 +275,6 @@ bool NavigationUnit::isObjectInYawDeadZone(const cv::Rect& objectBox, int frameW
     // The dead zone extends +/- (m_yawDeadZoneWidth / 2) horizontally from frame center
     return dx <= (m_yawDeadZoneWidth / 2.0f);
 }
-
 
 bool NavigationUnit::armVehicle(bool arm, bool force) {
     if (!m_mavlink) {

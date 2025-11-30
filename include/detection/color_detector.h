@@ -1,6 +1,7 @@
 #ifndef COLOR_DETECTOR_H
 #define COLOR_DETECTOR_H
 
+#include "../detector_interface.h"
 #include "../model.h"
 #include <opencv2/opencv.hpp>
 #include <vector>
@@ -9,8 +10,9 @@
 /**
  * @brief Color detection based on HSV color space
  * Detects objects by color range and provides bounding boxes for tracking
+ * Implements DetectorInterface for factory pattern usage
  */
-class ColorDetector {
+class ColorDetector : public DetectorInterface {
 public:
     struct ColorRange {
         cv::Scalar lowerBound;  // Lower HSV bound (H: 0-179, S: 0-255, V: 0-255)
@@ -27,14 +29,13 @@ public:
     };
 
     explicit ColorDetector(const Config& config);
-    ~ColorDetector() = default;
+    ~ColorDetector() override = default;
 
-    /**
-     * @brief Detect colored objects in the frame
-     * @param frame Input frame (BGR format)
-     * @return Vector of detections with bounding boxes, confidence, and class info
-     */
-    std::vector<model::Detection> detect(const cv::Mat& frame);
+    // DetectorInterface implementation
+    std::vector<model::Detection> detect(const cv::Mat& frame) override;
+    std::string getName() const override { return "Color Detection"; }
+    bool isInitialized() const override { return true; }
+    std::vector<std::string> getClassNames() const override;
 
     /**
      * @brief Get the target class ID (always 0 for color detection)

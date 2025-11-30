@@ -38,14 +38,20 @@ public:
 
     // Public method to update video display from Application
     void updateVideoFrame(const cv::Mat& frame);
+    void updateVideoFrameThreadSafe(const cv::Mat& frame);
+    void updateTrackingFrameThreadSafe(const cv::Mat& frame);
 
 Q_SIGNALS:
     void startRequested();
     void stopRequested();
     void pauseRequested();
     void configurationChanged();
+    void videoFrameReady(const QImage& image);
+    void trackingFrameReady(const QImage& image);
 
 public Q_SLOTS:
+    void onVideoFrameReady(const QImage& image);
+    void onTrackingFrameReady(const QImage& image);
     void updateStatus(const QString& status);
     void updateFPS(double fps);
     void updateDetectionStats(int detectionCount);
@@ -67,6 +73,9 @@ private Q_SLOTS:
     void onConfigureMAVLinkClicked();
     void onSaveConfigClicked();
     void onAboutClicked();
+    void onTakeoffClicked();
+    void onLandClicked();
+    void onAltHoldClicked();
     void refreshUI();
 
 private:
@@ -94,6 +103,7 @@ private:
     
     // UI Components - Video Display
     QLabel* videoLabel_;
+    QLabel* trackingLabel_;
     QFrame* videoFrame_;
     
     // Control Buttons
@@ -103,6 +113,9 @@ private:
     QPushButton* browseVideoBtn_;
     QPushButton* configureMAVLinkBtn_;
     QPushButton* saveConfigBtn_;
+    QPushButton* takeoffBtn_;
+    QPushButton* landBtn_;
+    QPushButton* altHoldBtn_;
     
     // Input Selection
     QRadioButton* cameraRadio_;
@@ -114,6 +127,7 @@ private:
     QRadioButton* helmetModelRadio_;
     QRadioButton* faceModelRadio_;
     QRadioButton* colorModelRadio_;
+    QRadioButton* apriltagModelRadio_;
     
     // Operation Mode
     QRadioButton* detectTrackRadio_;

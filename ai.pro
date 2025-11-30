@@ -1,6 +1,6 @@
-QT -= gui
+QT += core widgets
 
-CONFIG += c++17 console
+CONFIG += c++17
 CONFIG -= app_bundle
 
 # Fix MAVLink packed structure alignment warnings
@@ -33,9 +33,12 @@ SOURCES += \
     src/tracker_manager.cpp \
     src/detection_manager.cpp \
     src/detection/yolo_detector.cpp \
+    src/detection/yolo_detector_impl.cpp \
     src/detection/color_detector.cpp \
+    src/detection/apriltag_detector.cpp \
     src/mavlink.cpp \
     src/navigation_unit.cpp \
+    src/mainwindow.cpp \
     src/logger.cpp \
 
 # Add libcamera and dependencies
@@ -91,9 +94,13 @@ HEADERS += \
     include/tracker_interface.h \
     include/tracker_manager.h \
     include/detection_manager.h \
+    include/detector_interface.h \
     include/detection/yolo_detector.h \
+    include/detection/yolo_detector_impl.h \
     include/detection/color_detector.h \
+    include/detection/apriltag_detector.h \
     include/frame_pool.h \
     include/mavlink.h \
     include/navigation_unit.h \
+    include/mainwindow.h \
     include/logger.h \

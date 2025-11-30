@@ -112,8 +112,8 @@ yaw_dead_zone_width=100
 
 # Detection model configuration
 [detection_model]
-# Model type: 0=vehicle detection, 1=helmet detection, 2=face detection, 3=color detection
-model_type=3
+# Model type: 0=vehicle detection, 1=helmet detection, 2=face detection, 3=color detection, 4=apriltag detection
+model_type=4
 
 #model paths
 yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov8-vehicle.onnx
@@ -140,3 +140,17 @@ target_colors=blue
 min_area=500
 # Maximum contour area to detect (pixels squared)
 max_area=50000
+
+# AprilTag detection configuration (used when model_type=4)
+[apriltag_detection]
+# Tag family: 0=16h5 (30 tags), 1=25h9 (35 tags), 2=36h11 (587 tags, recommended)
+tag_family=2
+# Comma-separated list of specific tag IDs to detect (empty = detect all tags)
+# Example: target_tag_ids=0,1,2,5,10
+target_tag_ids=
+# Minimum marker perimeter in pixels
+min_marker_perimeter=50
+# Maximum marker perimeter in pixels
+max_marker_perimeter=4000
+# Enable corner refinement for better accuracy (0=off, 1=on)
+refine_detection=1

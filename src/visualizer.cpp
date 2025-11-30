@@ -80,9 +80,9 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
         int bottomBoundaryY = std::min(frame.rows - 1, objectCenter.y + halfCenteringRadius);
         // Draw horizontal lines showing centering tolerance boundaries around tracked object
         cv::line(frame, cv::Point(0, topBoundaryY), cv::Point(frame.cols - 1, topBoundaryY), 
-                 cv::Scalar(255, 0, 255), 2); // Magenta top boundary
+                 cv::Scalar(0, 0, 255), 4); // red top boundary
         cv::line(frame, cv::Point(0, bottomBoundaryY), cv::Point(frame.cols - 1, bottomBoundaryY), 
-                 cv::Scalar(255, 0, 255), 2); // Magenta bottom boundary
+                 cv::Scalar(0, 0, 255), 4); // red bottom boundary
                  
         // Draw tolerance circle around object center using the configured radius
         // cv::circle(frame, objectCenter, static_cast<int>(centeringRadius), cv::Scalar(255, 0, 255), 
@@ -95,9 +95,9 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
         
         // Draw vertical lines showing yaw dead zone boundaries
         cv::line(frame, cv::Point(yawLeftBoundaryX, 0), cv::Point(yawLeftBoundaryX, frame.rows - 1), 
-                 cv::Scalar(255, 165, 0), 2); // Orange left boundary
+                 cv::Scalar(0, 0, 255), 4); // Orange left boundary
         cv::line(frame, cv::Point(yawRightBoundaryX, 0), cv::Point(yawRightBoundaryX, frame.rows - 1), 
-                 cv::Scalar(255, 165, 0), 2); // Orange right boundary
+                 cv::Scalar(0, 0, 255), 4); // Orange right boundary
         
         // Draw line between frame center and object center
         cv::line(frame, frameCenter, objectCenter, cv::Scalar(255, 255, 0), 2); // Yellow line

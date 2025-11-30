@@ -118,6 +118,22 @@ public:
     bool sendRCOverride(const uint16_t channels[18]);
     
     /**
+     * @brief Send attitude target command for direct attitude control
+     * 
+     * @param roll_rate Roll rate in rad/s (body frame)
+     * @param pitch_rate Pitch rate in rad/s (body frame)
+     * @param yaw_rate Yaw rate in rad/s (body frame)
+     * @param thrust Thrust level (0.0 to 1.0, normalized)
+     * @param use_rates If true, use rate control; if false, use angle control
+     * @param roll Roll angle in radians (used if use_rates is false)
+     * @param pitch Pitch angle in radians (used if use_rates is false)
+     * @param yaw Yaw angle in radians (used if use_rates is false)
+     * @return true if command sent successfully
+     */
+    bool sendAttitudeTarget(float roll_rate, float pitch_rate, float yaw_rate, float thrust,
+                          bool use_rates = true, float roll = 0.0f, float pitch = 0.0f, float yaw = 0.0f);
+    
+    /**
      * @brief Check if MAVLink is properly connected and ready
      * 
      * @return true if MAVLink is initialized and running
@@ -137,6 +153,14 @@ public:
      * @return true if vehicle is armed, false otherwise
      */
     bool isVehicleArmed() const;
+    
+    /**
+     * @brief Set flight mode
+     * 
+     * @param mode Flight mode number (0=Stabilize, 2=AltHold, 3=Auto, 4=Guided, etc.)
+     * @return true if command sent successfully
+     */
+    bool setFlightMode(uint32_t mode);
     
     /**
      * @brief Test MAVLink message format to verify proper encoding

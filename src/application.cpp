@@ -1,10 +1,12 @@
 #include "include/application.h"
+#include "include/mainwindow.h"
 #include "include/config_utils.h"
 #include "include/resource_monitor.h"
 #include "include/tracker_manager.h"
 #include "include/detection_manager.h"
 #include "include/frame_buffer_manager.h"
 #include "include/logger.h"
+#include <QMetaObject>
 #include <iostream>
 #include <sstream>
 #include <csignal>
@@ -15,7 +17,8 @@
 #include <iomanip>
 
 std::atomic<bool> Application::m_running(true);
-Application::Application() : m_operationMode(0), m_showTrackingPath(false), m_selectionStrategy(0), m_mavlinkEnabled(false) {
+Application::Application() : m_operationMode(0), m_showTrackingPath(false), m_selectionStrategy(0), 
+                            m_mavlinkEnabled(false), m_mainWindow(nullptr), m_threadsRunning(false) {
     setupSignalHandler();
 }
 
@@ -120,7 +123,8 @@ void Application::logConfiguration() const {
     std::string modelTypeName = (modelType == 0) ? "Vehicle Detection" :
                                (modelType == 1) ? "Helmet Detection" :
                                (modelType == 2) ? "Face Detection" : 
-                               (modelType == 3) ? "Color Detection" : "Unknown";
+                               (modelType == 3) ? "Color Detection" :
+                               (modelType == 4) ? "AprilTag Detection" : "Unknown";
     LOG_INFO("Model: {}", modelTypeName);
     
     LOG_INFO("Operation Mode: {}", (m_operationMode == 0 ? "Detection + Tracking" : "Detection Only"));
@@ -255,6 +259,32 @@ bool Application::initializeModels() {
         
         modelConfig.colorConfig.minContourArea = config_utils::getConfigFloat(m_config, "color_detection.min_area");
         modelConfig.colorConfig.maxContourArea = config_utils::getConfigFloat(m_config, "color_detection.max_area");
+    } else if (modelType == 4) {
+        // AprilTag detection configuration
+        modelConfig.apriltagConfig.tagFamily = config_utils::getConfigInt(m_config, "apriltag_detection.tag_family");
+        modelConfig.apriltagConfig.minMarkerPerimeter = config_utils::getConfigInt(m_config, "apriltag_detection.min_marker_perimeter");
+        modelConfig.apriltagConfig.maxMarkerPerimeter = config_utils::getConfigInt(m_config, "apriltag_detection.max_marker_perimeter");
+        modelConfig.apriltagConfig.refineDetection = config_utils::getConfigInt(m_config, "apriltag_detection.refine_detection") == 1;
+        
+        // Parse target tag IDs (comma-separated, empty = detect all)
+        std::string tagIdsStr = config_utils::getConfigString(m_config, "apriltag_detection.target_tag_ids");
+        if (!tagIdsStr.empty()) {
+            std::stringstream ss(tagIdsStr);
+            std::string idStr;
+            while (std::getline(ss, idStr, ',')) {
+                // Trim whitespace
+                idStr.erase(0, idStr.find_first_not_of(" \t"));
+                idStr.erase(idStr.find_last_not_of(" \t") + 1);
+                if (!idStr.empty()) {
+                    try {
+                        int tagId = std::stoi(idStr);
+                        modelConfig.apriltagConfig.targetTagIds.push_back(tagId);
+                    } catch (...) {
+                        LOG_WARN("Invalid tag ID: {}", idStr);
+                    }
+                }
+            }
+        }
     } else {
         throw std::runtime_error("Invalid model type: " + std::to_string(modelType));
     }
@@ -409,6 +439,13 @@ void Application::modelsThread() {
             // Update detection frame for combined view
             m_visualizer.updateDetectionFrame(frame);
             m_visualizer.showCombinedView();
+            
+            // Send frame to UI if MainWindow is set
+            if (m_mainWindow) {
+                m_mainWindow->updateVideoFrameThreadSafe(frame);
+                QMetaObject::invokeMethod(m_mainWindow, "updateDetectionStats",
+                    Qt::QueuedConnection, Q_ARG(int, static_cast<int>(detections.size())));
+            }
         }
         
         // Process detections for tracking - Use clean frame for tracker initialization
@@ -555,6 +592,11 @@ void Application::trackingThread() {
             // Update tracking frame for combined view only (no separate tracking window)
             m_visualizer.updateTrackingFrame(frame);
             m_visualizer.showCombinedView();
+            
+            // Send tracking frame to UI if MainWindow is set
+            if (m_mainWindow) {
+                m_mainWindow->updateTrackingFrameThreadSafe(frame);
+            }
         }
     }
     cv::destroyAllWindows();
@@ -696,16 +738,36 @@ void Application::navigationThread() {
                         );
                         
                         // Generate and send control commands
-                        m_navigationUnit.generateControlCommands(
+                        ControlOutputs outputs = m_navigationUnit.generateControlCommands(
                             rawError, trackBox, frame.cols, frame.rows
                         );
                         
-                        // Periodic logging (avoid spamming)
+                        // Convert milliradians back to radians for display
+                        float pitch_rad = outputs.pitch_output / 1000.0f;
+                        float yaw_rad = outputs.yaw_output / 1000.0f;
+                        
+                        // Periodic logging (avoid spamming) - using INFO level to show in UI
                         if (++logCounter >= logInterval) {
                             float altitude = m_mavlink->getCurrentAltitudeMSL();
                             float climbRate = m_mavlink->getCurrentClimbRate();
-                            LOG_DEBUG("Nav: Alt={:.1f}m, Climb={:.2f}m/s, Error=({:.1f},{:.1f})", 
-                                     altitude, climbRate, rawError.x, rawError.y);
+                            LOG_INFO("Nav: Alt={:.1f}m, Climb={:.2f}m/s, Error=({:.1f},{:.1f}), Pitch={:+.4f}rad, Yaw={:+.4f}rad", 
+                                     altitude, climbRate, rawError.x, rawError.y, pitch_rad, yaw_rad);
+                            
+                            // Also send to UI log window if available
+                            if (m_mainWindow) {
+                                // Force sign display with explicit formatting
+                                QString pitchStr = QString("%1%2").arg(pitch_rad >= 0 ? "+" : "").arg(pitch_rad, 0, 'f', 4);
+                                QString yawStr = QString("%1%2").arg(yaw_rad >= 0 ? "+" : "").arg(yaw_rad, 0, 'f', 4);
+                                QString logMsg = QString("Nav: Alt=%1m, Error=(%2,%3), Pitch=%4rad, Yaw=%5rad")
+                                    .arg(altitude, 0, 'f', 1)
+                                    .arg(rawError.x, 0, 'f', 1)
+                                    .arg(rawError.y, 0, 'f', 1)
+                                    .arg(pitchStr)
+                                    .arg(yawStr);
+                                QMetaObject::invokeMethod(m_mainWindow, "logMessage", 
+                                    Qt::QueuedConnection, Q_ARG(QString, logMsg));
+                            }
+                            
                             logCounter = 0;
                         }
                     } else {
@@ -747,4 +809,69 @@ void Application::cleanup() {
     if (m_videoHandler) {
         m_videoHandler->cleanup();
     }
+}
+
+void Application::setMainWindow(MainWindow* window) {
+    m_mainWindow = window;
+}
+
+void Application::stop() {
+    m_running.store(false);
+    m_threadsRunning.store(false);
+}
+
+void Application::startThreads() {
+    if (m_threadsRunning.load()) {
+        LOG_WARN("Threads already running");
+        return;
+    }
+    
+    m_running.store(true);
+    m_threadsRunning.store(true);
+    
+    // Start processing threads
+    std::thread detectionThread(&Application::modelsThread, this);
+    std::thread trackingThreadObj(&Application::trackingThread, this);
+    std::thread navigationThreadObj(&Application::navigationThread, this);
+    
+    detectionThread.detach();
+    trackingThreadObj.detach();
+    navigationThreadObj.detach();
+    
+    LOG_INFO("Processing threads started");
+}
+
+void Application::stopThreads() {
+    m_threadsRunning.store(false);
+    LOG_INFO("Processing threads stop requested");
+}
+
+bool Application::takeoff(float altitude) {
+    if (!m_mavlink) {
+        LOG_ERROR("MAVLink not initialized, cannot takeoff");
+        return false;
+    }
+    
+    LOG_INFO("Requesting takeoff to {} meters", altitude);
+    return m_mavlink->takeoff(altitude);
+}
+
+bool Application::land() {
+    if (!m_mavlink) {
+        LOG_ERROR("MAVLink not initialized, cannot land");
+        return false;
+    }
+    
+    LOG_INFO("Requesting landing");
+    return m_mavlink->land();
+}
+
+bool Application::setFlightMode(uint32_t mode) {
+    if (!m_mavlink) {
+        LOG_ERROR("MAVLink not initialized, cannot set flight mode");
+        return false;
+    }
+    
+    LOG_INFO("Setting flight mode to: {}", mode);
+    return m_mavlink->setFlightMode(mode);
 } 
