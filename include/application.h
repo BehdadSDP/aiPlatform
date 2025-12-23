@@ -10,6 +10,8 @@
 #include "include/failure_handler.h"
 #include "include/mavlink.h"
 #include "include/navigation_unit.h"
+#include "include/thread_safe_queue.h"
+#include "include/inter_thread_messages.h"
 #include <atomic>
 #include <memory>
 #include <string>
@@ -38,7 +40,12 @@ public:
     // MAVLink Commands
     bool takeoff(float altitude);
     bool land();
+    bool arm(bool armVehicle);
     bool setFlightMode(uint32_t mode);
+    
+    // PID Tuning (real-time)
+    void setPitchPIDGains(float kp, float ki, float kd);
+    void setYawPIDGains(float kp, float ki, float kd);
 
 private:
     void setupSignalHandler();
@@ -74,6 +81,12 @@ private:
     int m_selectionStrategy;
     bool m_mavlinkEnabled;
     std::string m_sessionFolder;  // Timestamped folder for current session
+    
+    // Thread-safe message queues for producer-consumer pattern
+    // Replaces shared state with mutex approach for cleaner thread synchronization
+    ThreadSafeQueue<messages::DetectionResult> m_detectionQueue;    // Detection -> Tracking
+    ThreadSafeQueue<messages::TrackerStatus> m_trackerStatusQueue;  // Tracking -> Detection
+    ThreadSafeQueue<messages::TrackingResult> m_trackingResultQueue; // Tracking -> Navigation
     
     // UI Integration
     MainWindow* m_mainWindow;

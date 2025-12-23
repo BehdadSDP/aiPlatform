@@ -27,7 +27,9 @@ public:
     void setMavlink(Mavlink* mavlink);
 
     /**
-     * @brief Calculates the error between the center of the frame and the center of the tracked object.
+     * @brief +
+     * 
+     * Calculates the error between the center of the frame and the center of the tracked object.
      * 
      * @param objectBox The bounding box of the tracked object.
      * @param frameWidth The width of the camera frame.
@@ -166,13 +168,16 @@ private:
     float m_rollKd = 0.05f;
     
     // PID gains for pitch axis
-    float m_pitchKp = 0.1f;
-    float m_pitchKi = 1.0f;
-    float m_pitchKd = 0.0f;
+    // Kp: proportional response to error (0.5 = moderate)
+    // Ki: integral to eliminate steady-state error (0.1 = low, prevents overshoot)
+    // Kd: derivative for damping (0.05 = light damping)
+    float m_pitchKp = 0.7f;
+    float m_pitchKi = 0.01f;
+    float m_pitchKd = 0.001f;
     
     // PID gains for yaw axis
-    float m_yawKp = 0.02f;
-    float m_yawKi = 0;
+    float m_yawKp = 2.0f;
+    float m_yawKi = 0.1f;
     float m_yawKd = 0;
     
     // PID state variables for roll

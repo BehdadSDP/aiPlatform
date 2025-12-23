@@ -11,6 +11,7 @@
 #include <QGroupBox>
 #include <QApplication>
 #include <QScreen>
+#include <QScrollArea>
 #include <fstream>
 #include <vector>
 #include <string>
@@ -51,12 +52,15 @@ void MainWindow::setupUI() {
     
     // Get screen size for initial window sizing
     QScreen *screen = QApplication::primaryScreen();
-    QRect screenGeometry = screen->geometry();
+    QRect screenGeometry = screen->availableGeometry();  // Use available (excludes taskbar)
     int screenWidth = screenGeometry.width();
     int screenHeight = screenGeometry.height();
     
-    // Set window size to 80% of screen
-    resize(screenWidth * 0.8, screenHeight * 0.8);
+    // Set window size to fit screen (95% to leave small margin)
+    resize(screenWidth * 0.95, screenHeight * 0.95);
+    
+    // Move to top-left corner with small offset
+    move(screenGeometry.x() + screenWidth * 0.025, screenGeometry.y() + screenHeight * 0.025);
     
     createMenuBar();
     createMainLayout();
@@ -95,35 +99,56 @@ void MainWindow::createMainLayout() {
     // Create splitter for resizable panels
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
     
-    // Left panel: Controls
-    QWidget *controlWidget = new QWidget();
+    // Left panel: Controls (with scroll area for many controls)
+    QWidget *controlContents = new QWidget();
     createControlPanel();
-    QVBoxLayout *controlLayout = new QVBoxLayout(controlWidget);
+    QVBoxLayout *controlLayout = new QVBoxLayout(controlContents);
+    controlLayout->setContentsMargins(5, 5, 5, 5);
+    controlLayout->setSpacing(5);
     
     createInputPanel(controlLayout);
     createModelPanel(controlLayout);
     createTrackerPanel(controlLayout);
     createMAVLinkPanel(controlLayout);
+    createPIDTuningPanel(controlLayout);
     
     controlLayout->addStretch();
-    controlWidget->setLayout(controlLayout);
-    controlWidget->setMaximumWidth(350);
+    controlContents->setLayout(controlLayout);
+    
+    // Wrap controls in scroll area
+    QScrollArea *controlScrollArea = new QScrollArea();
+    controlScrollArea->setWidget(controlContents);
+    controlScrollArea->setWidgetResizable(true);
+    controlScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    controlScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    controlScrollArea->setMaximumWidth(360);
+    controlScrollArea->setMinimumWidth(280);
     
     // Center panel: Video Display
     createVideoDisplay();
     
-    // Right panel: Status and Stats
-    QWidget *statusWidget = new QWidget();
-    QVBoxLayout *statusLayout = new QVBoxLayout(statusWidget);
+    // Right panel: Status and Stats (with scroll area)
+    QWidget *statusContents = new QWidget();
+    QVBoxLayout *statusLayout = new QVBoxLayout(statusContents);
+    statusLayout->setContentsMargins(5, 5, 5, 5);
+    statusLayout->setSpacing(5);
     createStatusPanel();
     createStatsPanel(statusLayout);
-    statusWidget->setLayout(statusLayout);
-    statusWidget->setMaximumWidth(300);
+    statusLayout->addStretch();
+    statusContents->setLayout(statusLayout);
+    
+    QScrollArea *statusScrollArea = new QScrollArea();
+    statusScrollArea->setWidget(statusContents);
+    statusScrollArea->setWidgetResizable(true);
+    statusScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    statusScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    statusScrollArea->setMaximumWidth(310);
+    statusScrollArea->setMinimumWidth(220);
     
     // Add to splitter
-    splitter->addWidget(controlWidget);
+    splitter->addWidget(controlScrollArea);
     splitter->addWidget(videoFrame_);
-    splitter->addWidget(statusWidget);
+    splitter->addWidget(statusScrollArea);
     
     // Set stretch factors (center video gets most space)
     splitter->setStretchFactor(0, 1);
@@ -262,20 +287,30 @@ void MainWindow::createMAVLinkPanel(QVBoxLayout* layout) {
     mavlinkLayout->addWidget(batteryProgressBar_);
     mavlinkLayout->addWidget(configureMAVLinkBtn_);
     
-    // Flight mode button
-    altHoldBtn_ = new QPushButton("AltHold Mode");
-    altHoldBtn_->setEnabled(false);
-    connect(altHoldBtn_, &QPushButton::clicked, this, &MainWindow::onAltHoldClicked);
-    mavlinkLayout->addWidget(altHoldBtn_);
+    // Flight mode buttons
+    QHBoxLayout *flightModeLayout = new QHBoxLayout();
+    guidedNoGpsBtn_ = new QPushButton("GUIDED_NOGPS");
+    altHoldModeBtn_ = new QPushButton("ALT_HOLD");
+    guidedNoGpsBtn_->setEnabled(false);
+    altHoldModeBtn_->setEnabled(false);
+    connect(guidedNoGpsBtn_, &QPushButton::clicked, this, &MainWindow::onGuidedNoGpsClicked);
+    connect(altHoldModeBtn_, &QPushButton::clicked, this, &MainWindow::onAltHoldModeClicked);
+    flightModeLayout->addWidget(guidedNoGpsBtn_);
+    flightModeLayout->addWidget(altHoldModeBtn_);
+    mavlinkLayout->addLayout(flightModeLayout);
     
     // Takeoff and Land buttons
     QHBoxLayout *flightControlLayout = new QHBoxLayout();
     takeoffBtn_ = new QPushButton("Takeoff");
     landBtn_ = new QPushButton("Land");
+    armBtn_ = new QPushButton("Arm");
     takeoffBtn_->setEnabled(false);
     landBtn_->setEnabled(false);
+    armBtn_->setEnabled(false);
     connect(takeoffBtn_, &QPushButton::clicked, this, &MainWindow::onTakeoffClicked);
     connect(landBtn_, &QPushButton::clicked, this, &MainWindow::onLandClicked);
+    connect(armBtn_, &QPushButton::clicked, this, &MainWindow::onArmClicked);
+    flightControlLayout->addWidget(armBtn_);
     flightControlLayout->addWidget(takeoffBtn_);
     flightControlLayout->addWidget(landBtn_);
     mavlinkLayout->addLayout(flightControlLayout);
@@ -371,6 +406,98 @@ void MainWindow::createVideoDisplay() {
 
 void MainWindow::createStatusPanel() {
     // Status panel is created in createStatsPanel
+}
+
+void MainWindow::createPIDTuningPanel(QVBoxLayout* layout) {
+    QGroupBox *pidGroup = new QGroupBox("PID Tuning (Real-time)");
+    QVBoxLayout *pidLayout = new QVBoxLayout();
+    
+    // Pitch PID
+    QLabel *pitchLabel = new QLabel("Pitch PID:");
+    pitchLabel->setStyleSheet("font-weight: bold;");
+    pidLayout->addWidget(pitchLabel);
+    
+    QHBoxLayout *pitchKpLayout = new QHBoxLayout();
+    pitchKpLayout->addWidget(new QLabel("Kp:"));
+    pitchKpSpinBox_ = new QDoubleSpinBox();
+    pitchKpSpinBox_->setRange(0.0, 10.0);
+    pitchKpSpinBox_->setSingleStep(0.1);
+    pitchKpSpinBox_->setDecimals(3);
+    pitchKpSpinBox_->setValue(0.7);
+    pitchKpLayout->addWidget(pitchKpSpinBox_);
+    pidLayout->addLayout(pitchKpLayout);
+    
+    QHBoxLayout *pitchKiLayout = new QHBoxLayout();
+    pitchKiLayout->addWidget(new QLabel("Ki:"));
+    pitchKiSpinBox_ = new QDoubleSpinBox();
+    pitchKiSpinBox_->setRange(0.0, 1.0);
+    pitchKiSpinBox_->setSingleStep(0.01);
+    pitchKiSpinBox_->setDecimals(3);
+    pitchKiSpinBox_->setValue(0.01);
+    pitchKiLayout->addWidget(pitchKiSpinBox_);
+    pidLayout->addLayout(pitchKiLayout);
+    
+    QHBoxLayout *pitchKdLayout = new QHBoxLayout();
+    pitchKdLayout->addWidget(new QLabel("Kd:"));
+    pitchKdSpinBox_ = new QDoubleSpinBox();
+    pitchKdSpinBox_->setRange(0.0, 1.0);
+    pitchKdSpinBox_->setSingleStep(0.001);
+    pitchKdSpinBox_->setDecimals(4);
+    pitchKdSpinBox_->setValue(0.001);
+    pitchKdLayout->addWidget(pitchKdSpinBox_);
+    pidLayout->addLayout(pitchKdLayout);
+    
+    // Yaw PID
+    QLabel *yawLabel = new QLabel("Yaw PID:");
+    yawLabel->setStyleSheet("font-weight: bold;");
+    pidLayout->addWidget(yawLabel);
+    
+    QHBoxLayout *yawKpLayout = new QHBoxLayout();
+    yawKpLayout->addWidget(new QLabel("Kp:"));
+    yawKpSpinBox_ = new QDoubleSpinBox();
+    yawKpSpinBox_->setRange(0.0, 10.0);
+    yawKpSpinBox_->setSingleStep(0.1);
+    yawKpSpinBox_->setDecimals(3);
+    yawKpSpinBox_->setValue(2.0);
+    yawKpLayout->addWidget(yawKpSpinBox_);
+    pidLayout->addLayout(yawKpLayout);
+    
+    QHBoxLayout *yawKiLayout = new QHBoxLayout();
+    yawKiLayout->addWidget(new QLabel("Ki:"));
+    yawKiSpinBox_ = new QDoubleSpinBox();
+    yawKiSpinBox_->setRange(0.0, 1.0);
+    yawKiSpinBox_->setSingleStep(0.01);
+    yawKiSpinBox_->setDecimals(3);
+    yawKiSpinBox_->setValue(0.1);
+    yawKiLayout->addWidget(yawKiSpinBox_);
+    pidLayout->addLayout(yawKiLayout);
+    
+    QHBoxLayout *yawKdLayout = new QHBoxLayout();
+    yawKdLayout->addWidget(new QLabel("Kd:"));
+    yawKdSpinBox_ = new QDoubleSpinBox();
+    yawKdSpinBox_->setRange(0.0, 1.0);
+    yawKdSpinBox_->setSingleStep(0.001);
+    yawKdSpinBox_->setDecimals(4);
+    yawKdSpinBox_->setValue(0.0);
+    yawKdLayout->addWidget(yawKdSpinBox_);
+    pidLayout->addLayout(yawKdLayout);
+    
+    // Connect signals for real-time updates
+    connect(pitchKpSpinBox_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), 
+            this, &MainWindow::onPitchPIDChanged);
+    connect(pitchKiSpinBox_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), 
+            this, &MainWindow::onPitchPIDChanged);
+    connect(pitchKdSpinBox_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), 
+            this, &MainWindow::onPitchPIDChanged);
+    connect(yawKpSpinBox_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), 
+            this, &MainWindow::onYawPIDChanged);
+    connect(yawKiSpinBox_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), 
+            this, &MainWindow::onYawPIDChanged);
+    connect(yawKdSpinBox_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), 
+            this, &MainWindow::onYawPIDChanged);
+    
+    pidGroup->setLayout(pidLayout);
+    layout->addWidget(pidGroup);
 }
 
 void MainWindow::createStatsPanel(QVBoxLayout* layout) {
@@ -514,6 +641,30 @@ void MainWindow::applyStyles() {
             color: #e0e0e0;
             border: 1px solid #666;
         }
+        QScrollArea {
+            background-color: #353535;
+            border: none;
+        }
+        QScrollArea > QWidget > QWidget {
+            background-color: #353535;
+        }
+        QScrollBar:vertical {
+            background-color: #353535;
+            width: 12px;
+            border: none;
+        }
+        QScrollBar::handle:vertical {
+            background-color: #555;
+            border-radius: 4px;
+            min-height: 20px;
+            margin: 2px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background-color: #666;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
     )";
     
     setStyleSheet(styleSheet);
@@ -586,7 +737,9 @@ void MainWindow::onMAVLinkEnableChanged(int state) {
     
     // Enable/disable flight control buttons based on MAVLink enabled state
     // They will remain enabled if MAVLink is enabled, even before connection
-    altHoldBtn_->setEnabled(enabled);
+    guidedNoGpsBtn_->setEnabled(enabled);
+    altHoldModeBtn_->setEnabled(enabled);
+    armBtn_->setEnabled(enabled);
     takeoffBtn_->setEnabled(enabled);
     landBtn_->setEnabled(enabled);
     
@@ -659,18 +812,83 @@ void MainWindow::onLandClicked() {
     }
 }
 
-void MainWindow::onAltHoldClicked() {
+void MainWindow::onArmClicked() {
     if (!app_) {
         logMessage("Application not initialized");
         return;
     }
     
-    logMessage("Setting flight mode to AltHold...");
-    if (app_->setFlightMode(2)) {  // 2 = AltHold mode for ArduCopter
-        logMessage("AltHold mode command sent successfully");
-    } else {
-        logMessage("Failed to set AltHold mode");
+    // Toggle arm state based on button text
+    bool isArming = (armBtn_->text() == "Arm");
+    
+    QString action = isArming ? "arm" : "disarm";
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, QString("Confirm %1").arg(action.toUpper()),
+                                   QString("Are you sure you want to %1 the vehicle?").arg(action),
+                                   QMessageBox::Yes | QMessageBox::No);
+    
+    if (reply == QMessageBox::Yes) {
+        logMessage(QString("%1ing vehicle...").arg(isArming ? "Arm" : "Disarm"));
+        if (app_->arm(isArming)) {
+            logMessage(QString("%1 command sent successfully").arg(isArming ? "Arm" : "Disarm"));
+        } else {
+            logMessage(QString("Failed to %1 vehicle").arg(action));
+        }
     }
+}
+
+void MainWindow::onGuidedNoGpsClicked() {
+    if (!app_) {
+        logMessage("Application not initialized");
+        return;
+    }
+    
+    logMessage("Setting flight mode to GUIDED_NOGPS...");
+    if (app_->setFlightMode(20)) {  // 20 = GUIDED_NOGPS mode for ArduCopter
+        logMessage("GUIDED_NOGPS mode command sent successfully");
+    } else {
+        logMessage("Failed to set GUIDED_NOGPS mode");
+    }
+}
+
+void MainWindow::onAltHoldModeClicked() {
+    if (!app_) {
+        logMessage("Application not initialized");
+        return;
+    }
+    
+    logMessage("Setting flight mode to ALT_HOLD...");
+    if (app_->setFlightMode(2)) {  // 2 = ALT_HOLD mode for ArduCopter
+        logMessage("ALT_HOLD mode command sent successfully");
+    } else {
+        logMessage("Failed to set ALT_HOLD mode");
+    }
+}
+
+void MainWindow::onPitchPIDChanged() {
+    if (!app_) {
+        return;
+    }
+    
+    float kp = static_cast<float>(pitchKpSpinBox_->value());
+    float ki = static_cast<float>(pitchKiSpinBox_->value());
+    float kd = static_cast<float>(pitchKdSpinBox_->value());
+    
+    app_->setPitchPIDGains(kp, ki, kd);
+    logMessage(QString("Pitch PID updated: Kp=%1, Ki=%2, Kd=%3").arg(kp).arg(ki).arg(kd));
+}
+
+void MainWindow::onYawPIDChanged() {
+    if (!app_) {
+        return;
+    }
+    
+    float kp = static_cast<float>(yawKpSpinBox_->value());
+    float ki = static_cast<float>(yawKiSpinBox_->value());
+    float kd = static_cast<float>(yawKdSpinBox_->value());
+    
+    app_->setYawPIDGains(kp, ki, kd);
+    logMessage(QString("Yaw PID updated: Kp=%1, Ki=%2, Kd=%3").arg(kp).arg(ki).arg(kd));
 }
 
 void MainWindow::refreshUI() {
@@ -790,7 +1008,12 @@ void MainWindow::updateMAVLinkStatus(bool connected, uint32_t flightMode, bool a
         }
         
         // Enable flight mode button when connected (doesn't need to be armed)
-        altHoldBtn_->setEnabled(connected);
+        guidedNoGpsBtn_->setEnabled(connected);
+        altHoldModeBtn_->setEnabled(connected);
+        
+        // Update arm button text based on armed state
+        armBtn_->setEnabled(connected);
+        armBtn_->setText(armed ? "Disarm" : "Arm");
         
         // Enable flight control buttons when connected (arm check removed for testing)
         takeoffBtn_->setEnabled(connected);
@@ -803,7 +1026,10 @@ void MainWindow::updateMAVLinkStatus(bool connected, uint32_t flightMode, bool a
         batteryProgressBar_->setValue(0);
         
         // Disable flight control buttons when disconnected
-        altHoldBtn_->setEnabled(false);
+        guidedNoGpsBtn_->setEnabled(false);
+        altHoldModeBtn_->setEnabled(false);
+        armBtn_->setEnabled(false);
+        armBtn_->setText("Arm");
         takeoffBtn_->setEnabled(false);
         landBtn_->setEnabled(false);
     }
@@ -1115,6 +1341,7 @@ QString MainWindow::getFlightModeName(uint32_t mode) {
         case 9: return "LAND";
         case 16: return "POSHOLD";
         case 17: return "BRAKE";
+        case 20: return "GUIDED_NOGPS";
         default: return QString("UNKNOWN(%1)").arg(mode);
     }
 }

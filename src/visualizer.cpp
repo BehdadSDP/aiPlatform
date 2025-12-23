@@ -122,14 +122,13 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
         if (mavlinkConnected) {
             statusLine = "MAVLink: CONNECTED";
             cv::putText(frame, statusLine, cv::Point(xPos, 28),
-                       cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(0, 255, 0), fontThickness);
+                       cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(0, 0, 255), fontThickness);
             xPos += cv::getTextSize(statusLine, cv::FONT_HERSHEY_SIMPLEX, fontSize, fontThickness, nullptr).width + 20;
             
-            // Flight mode (highlight ALT_HOLD in green as it's the tracking mode)
+            // Flight mode
             std::string flightModeText = "Mode: " + getFlightModeName(flightMode);
-            cv::Scalar flightModeColor = (flightMode == 2) ? cv::Scalar(0, 255, 0) : cv::Scalar(200, 200, 200);  // Green for ALT_HOLD
             cv::putText(frame, flightModeText, cv::Point(xPos, 28),
-                       cv::FONT_HERSHEY_SIMPLEX, fontSize, flightModeColor, fontThickness);
+                       cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(0, 0, 255), fontThickness);
             xPos += cv::getTextSize(flightModeText, cv::FONT_HERSHEY_SIMPLEX, fontSize, fontThickness, nullptr).width + 20;
         } else {
             statusLine = "MAVLink: DISCONNECTED";
@@ -142,35 +141,31 @@ void Visualizer::visualizeTracking(cv::Mat& frame, bool isTracking, const cv::Re
         if (controlOutputs) {
             // RC command status - show DEADZONE when in overlap zone
             std::string rcStatusText;
-            cv::Scalar rcStatusColor;
             
             if (controlOutputs->in_dead_zone) {
                 rcStatusText = "RC: DEADZONE";
-                rcStatusColor = cv::Scalar(0, 255, 0);  // Green for dead zone
             } else if (controlOutputs->rc_commands_sent) {
                 rcStatusText = "RC: ACTIVE";
-                rcStatusColor = cv::Scalar(0, 255, 255);  // Cyan for active
             } else {
                 rcStatusText = "RC: SUPPRESSED";
-                rcStatusColor = cv::Scalar(0, 255, 0);  // Green for suppressed
             }
             
             cv::putText(frame, rcStatusText, cv::Point(xPos, 28),
-                       cv::FONT_HERSHEY_SIMPLEX, fontSize, rcStatusColor, fontThickness);
+                       cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(0, 0, 255), fontThickness);
             xPos += cv::getTextSize(rcStatusText, cv::FONT_HERSHEY_SIMPLEX, fontSize, fontThickness, nullptr).width + 20;
             
-            // Control outputs (removed roll, only pitch and yaw)
-            std::string controlText = "Pitch: " + std::to_string(controlOutputs->pitch_output) +
-                                    " Yaw: " + std::to_string(controlOutputs->yaw_output);
+            // Control outputs in degrees (removed roll, only pitch and yaw)
+            std::string controlText = "Pitch: " + std::to_string(controlOutputs->pitch_output) + "deg" +
+                                    " Yaw: " + std::to_string(controlOutputs->yaw_output) + "deg";
             cv::putText(frame, controlText, cv::Point(xPos, 28),
-                       cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(255, 255, 0), fontThickness);
+                       cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(0, 0, 255), fontThickness);
             xPos += cv::getTextSize(controlText, cv::FONT_HERSHEY_SIMPLEX, fontSize, fontThickness, nullptr).width + 20;
             
             // Filtered errors
             std::string errorText = "Err X: " + std::to_string(static_cast<int>(controlOutputs->error.x)) + 
                                   " Y: " + std::to_string(static_cast<int>(controlOutputs->error.y));
             cv::putText(frame, errorText, cv::Point(xPos, 28),
-                       cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(255, 255, 0), fontThickness);
+                       cv::FONT_HERSHEY_SIMPLEX, fontSize, cv::Scalar(0, 0, 255), fontThickness);
         }
     }
 

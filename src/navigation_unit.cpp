@@ -1,4 +1,4 @@
-#include "include/navigation_unit.h"
+﻿#include "include/navigation_unit.h"
 #include "include/mavlink.h" // Include the full header for implementation
 #include "include/logger.h"
 #include <iostream>
@@ -116,14 +116,19 @@ int NavigationUnit::applySlewRateLimit(int desiredOutput, int previousOutput, fl
 
 float NavigationUnit::computePID(float error, float kp, float ki, float kd, 
                                  float& integral, float& previousError, float deltaTime, float deadZone) {
-    // Integral term with windup protection
+    // If in dead zone, reset integral and return zero
+    // This ensures the drone stops moving when object is centered
+    if (std::abs(error) < deadZone) {
+        // integral = 0.0f;  // Reset integral to prevent drift
+        integral += error * deltaTime;  // Accumulate integral even in dead zone (for testing)
+        integral = std::clamp(integral, -m_integralMax, m_integralMax);
+        previousError = error;
+        return ki * integral;  // Return only integral term in dead zone
+    }
+    
+    // Only accumulate integral when OUTSIDE dead zone
     integral += error * deltaTime;
     integral = std::clamp(integral, -m_integralMax, m_integralMax);
-    float integralTerm = ki * integral;
-    if (std::abs(error) < deadZone) {
-        previousError = error;
-        return integralTerm; // Only integral term within dead zone
-    }
 
     // Proportional term
     float proportional = kp * error;
@@ -135,10 +140,13 @@ float NavigationUnit::computePID(float error, float kp, float ki, float kd,
     }
     float derivativeTerm = kd * derivative;
     
+    // Integral term
+    float integralTerm = ki * integral;
+    
     // Store current error for next iteration
     previousError = error;
     
-    //return full PID output
+    // Return full PID output
     return proportional + integralTerm + derivativeTerm;
 }
 
@@ -195,27 +203,28 @@ ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error,
     m_firstUpdate = false;
     
     // Convert PID outputs to attitude angles (radians)
-    // PID output is in arbitrary units, scale to very small angles
-    // Without gimbal, large angles will move camera view and lose tracking
-    // Max angle of ±5 degrees = ±0.087 radians (small angle for camera stability)
-    const float max_angle = 0.087f;  // radians (~5 degrees)
-    const float pid_scale = 0.00005f;  // Scale factor: adjust based on PID tuning
+    // Scale PID output (in pixels) to angle (in radians)
+    // Formula: angle = (error_pixels / frame_height) * max_angle
+    // This gives proportional response: larger error = larger angle, up to max
+    const float max_angle = 0.087f;  // radians (~5 degrees) - max safe tilt
     
-    // Note: Pitch is inverted because in ArduPilot:
-    // - Positive pitch = nose UP = backward movement
-    // - Negative pitch = nose DOWN = forward movement
-    // But our error convention is: positive error = object above center = want to move forward
-    // Therefore we need to invert the pitch angle
-    float pitch_angle = -pitchPIDOutput * pid_scale;  // Inverted for correct direction
-    float yaw_angle = yawPIDOutput * pid_scale;
+    // Normalize PID output to angle
+    // PID output is roughly proportional to error in pixels
+    // Assume frame height ~720, max error ~360 pixels
+    // Scale so that max error produces max angle
+    const float error_to_angle_scale = max_angle / 360.0f;  // ~0.00024 rad/pixel
+    
+    float pitch_angle = pitchPIDOutput * error_to_angle_scale;
+    float yaw_angle = yawPIDOutput * error_to_angle_scale;
     
     // Clamp angles to safe limits
     pitch_angle = std::clamp(pitch_angle, -max_angle, max_angle);
-    yaw_angle = std::clamp(yaw_angle, -max_angle, max_angle);
+    yaw_angle = std::clamp(yaw_angle, -max_angle, max_angle) + 3.14/2;
     
-    // Store outputs as angles (in radians)
-    outputs.pitch_output = static_cast<int>(pitch_angle * 1000);  // Store as milliradians for integer storage
-    outputs.yaw_output = static_cast<int>(yaw_angle * 1000);      // Store as milliradians for integer storage
+    // Store outputs as degrees (for easier display)
+    // Convert radians to degrees: rad * (180/π) ≈ rad * 57.3
+    outputs.pitch_output = static_cast<int>(pitch_angle * 57.3f);  // degrees
+    outputs.yaw_output = static_cast<int>(yaw_angle * 57.3f);      // degrees
     outputs.rc_commands_sent = true;
     outputs.in_dead_zone = inDeadZone;
     
@@ -225,15 +234,15 @@ ControlOutputs NavigationUnit::generateControlCommands(const cv::Point2f& error,
         // ArduPilot does NOT support body rates in SET_ATTITUDE_TARGET
         // Must use quaternion attitude control instead
         float roll_angle = 0.0f;  // No roll
-        float thrust = 0.5f;      // 0.5 = maintain altitude (if GUID_OPTIONS=0)
+        float thrust = 0.59;      // 0.5 = maintain altitude (if GUID_OPTIONS=0)
         
         // Testing: Only pitch control, yaw disabled
         float test_yaw = 0.0f;
-        
-        LOG_DEBUG("Sending attitude target - Pitch: {:.3f} rad, Yaw: {:.3f} rad (disabled)", 
+     yaw_angle = 90.0f;
+        LOG_DEBUG("Sending attitude target - Pitch: {:.3f} rad, Yaw: {:.3f} rad", 
                   pitch_angle, test_yaw);
         
-        (void)m_mavlink->sendAttitudeTarget(0.0f, 0.0f, 0.0f, thrust, false, roll_angle, pitch_angle, test_yaw);
+        (void)m_mavlink->sendAttitudeTarget(0.0f, 0.0f, 0.0f, thrust, false, roll_angle, pitch_angle, yaw_angle);
     } else {
         LOG_ERROR("NavigationUnit: MAVLink system not set, cannot send attitude target");
     }

@@ -1,7 +1,7 @@
 # Input settings
 [input]
 # Input type: 0 for camera, 1 for video file
-input_type=0
+input_type=1
 # Video file path (used when input_type=1)
 video_path=/home/pi5/shared_folder/aiPlatform/test/test_road.mp4
 
@@ -49,7 +49,7 @@ interval=0
 # VitTracker: Vision Transformer tracker - accurate but slower, requires vittracker model
 # SiamFCPP: Siamese tracker - good balance, requires siamfc feature and tracking models
 # CSRT: Discriminative Correlation Filter - fast, robust, no model files needed (recommended for quick testing)
-tracker_type=0
+tracker_type=2
 
 # Visualization settings
 [visualization]
@@ -106,14 +106,14 @@ filter_alpha=0.1
 # Lower values = tighter centering requirement (30-40 for precise)
 # Higher values = looser centering tolerance (60-100 for easier)
 # Typical range: 30-100
-centering_radius=200
+centering_radius=50
 # Yaw dead zone width in pixels (default: 100)
 yaw_dead_zone_width=100
 
 # Detection model configuration
 [detection_model]
 # Model type: 0=vehicle detection, 1=helmet detection, 2=face detection, 3=color detection, 4=apriltag detection
-model_type=4
+model_type=0
 
 #model paths
 yolo_model_path=/home/pi5/shared_folder/aiPlatform/models/yolov8-vehicle.onnx

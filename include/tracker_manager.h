@@ -32,6 +32,9 @@ public:
     cv::Rect getLastTrackBox() const { return lastTrackBox_; }
     int getTrackedClassId() const { return trackedClassId_; }
     const std::vector<cv::Point>& getTrackingPath() const { return trackingPath_; }
+    
+    // Get the underlying tracker for confidence access (read-only)
+    const TrackerInterface* getTracker() const { return tracker_.get(); }
 
 private:
     std::unique_ptr<TrackerInterface> tracker_;

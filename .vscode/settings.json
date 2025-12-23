@@ -89,5 +89,6 @@
         "titleBar.inactiveForeground": "#e7e7e799"
     },
     "peacock.color": "#343f7b",
-    "makefile.configureOnOpen": false
+    "makefile.configureOnOpen": false,
+    "git.ignoreLimitWarning": true
 }

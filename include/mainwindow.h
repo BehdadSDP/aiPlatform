@@ -16,6 +16,7 @@
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QCheckBox>
 #include <QProgressBar>
 #include <QTextEdit>
@@ -75,7 +76,11 @@ private Q_SLOTS:
     void onAboutClicked();
     void onTakeoffClicked();
     void onLandClicked();
-    void onAltHoldClicked();
+    void onArmClicked();
+    void onGuidedNoGpsClicked();
+    void onAltHoldModeClicked();
+    void onPitchPIDChanged();
+    void onYawPIDChanged();
     void refreshUI();
 
 private:
@@ -90,6 +95,7 @@ private:
     void createModelPanel(QVBoxLayout* layout);
     void createTrackerPanel(QVBoxLayout* layout);
     void createMAVLinkPanel(QVBoxLayout* layout);
+    void createPIDTuningPanel(QVBoxLayout* layout);
     void createStatsPanel(QVBoxLayout* layout);
     void applyStyles();
     
@@ -115,7 +121,9 @@ private:
     QPushButton* saveConfigBtn_;
     QPushButton* takeoffBtn_;
     QPushButton* landBtn_;
-    QPushButton* altHoldBtn_;
+    QPushButton* armBtn_;
+    QPushButton* guidedNoGpsBtn_;
+    QPushButton* altHoldModeBtn_;
     
     // Input Selection
     QRadioButton* cameraRadio_;
@@ -144,6 +152,14 @@ private:
     QLabel* altitudeLabel_;
     QLabel* batteryLabel_;
     QProgressBar* batteryProgressBar_;
+    
+    // PID Tuning Controls
+    QDoubleSpinBox* pitchKpSpinBox_;
+    QDoubleSpinBox* pitchKiSpinBox_;
+    QDoubleSpinBox* pitchKdSpinBox_;
+    QDoubleSpinBox* yawKpSpinBox_;
+    QDoubleSpinBox* yawKiSpinBox_;
+    QDoubleSpinBox* yawKdSpinBox_;
     
     // Status Display
     QLabel* statusLabel_;

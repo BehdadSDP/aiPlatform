@@ -407,7 +407,18 @@ void Application::modelsThread() {
     DetectionManager detectionManager(m_visualizer);
     detectionManager.setSelectionStrategy(m_selectionStrategy);
     
+    // Track tracker status from message queue
+    bool trackerActive = false;
+    
     while (m_running) {
+        // Check for tracker status updates (non-blocking)
+        if (auto status = m_trackerStatusQueue.tryPop()) {
+            trackerActive = status->isTracking();
+            if (status->needsRedetection()) {
+                LOG_DEBUG("Tracker needs re-detection, enabling detection");
+            }
+        }
+        
         // Check if detection should run based on detection mode
         if (!m_controlUnit.waitForDetectionTurn()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -455,6 +466,16 @@ void Application::modelsThread() {
             int selectedClassId;
             
             if (detectionManager.selectTarget(detections, selectedBox, selectedConf, selectedClassId)) {
+                // Send detection result via message queue (producer-consumer pattern)
+                messages::DetectionResult detectionMsg(
+                    selectedBox, cleanFrame, frameData.sequence, selectedClassId, selectedConf
+                );
+                
+                // Use pushOverwrite to always have latest detection available
+                // This prevents queue buildup if tracking thread is slow
+                m_detectionQueue.pushOverwrite(std::move(detectionMsg));
+                
+                // Also update control unit for backward compatibility
                 m_controlUnit.setDetection(selectedBox, cleanFrame, frameData.sequence, selectedClassId);
             }
         }
@@ -474,10 +495,16 @@ update tracker
 visualize tracking
 draw safety overlays
 display frame
+Uses message queue pattern for thread-safe communication with detection thread
 */
 void Application::trackingThread() {
-    // Static frame counter outside the loop to persist between iterations
-    static int frameCounter = 0;
+    // Frame counter for saving images (non-static for thread safety)
+    int frameCounter = 0;
+    
+    // FPS calculation variables
+    auto fpsStartTime = std::chrono::steady_clock::now();
+    int fpsFrameCount = 0;
+    double currentFPS = 0.0;
     
     // Create timestamped folder for this session
     auto now = std::chrono::system_clock::now();
@@ -498,12 +525,57 @@ void Application::trackingThread() {
         LOG_INFO("Created session folder: {}", m_sessionFolder);
     }
     
+    // Send initial tracker status
+    m_trackerStatusQueue.pushOverwrite(messages::TrackerStatus(messages::TrackerStatus::State::IDLE));
+    
     while(m_running) {
         if (!m_controlUnit.waitForTrackingTurn()) {
             continue;
         }
 
-        // Handle tracker initialization/re-initialization
+        // Check for new detection from message queue (non-blocking, get latest)
+        // This is the primary method for receiving detections (producer-consumer pattern)
+        auto detectionOpt = m_detectionQueue.popLatest();
+        
+        if (detectionOpt.has_value()) {
+            const auto& detection = detectionOpt.value();
+            
+            // Initialize/re-initialize tracker if not tracking or tracker failed
+            if (!m_trackerManager.isTracking() || m_controlUnit.hasTrackerFailed()) {
+                if (m_trackerManager.start(detection.frame, detection.boundingBox, 
+                                          detection.classId, m_modelManager.getClassNames())) {
+                    m_controlUnit.setIsTracking(true);
+                    m_controlUnit.setTrackerFailed(false);
+                    m_controlUnit.markDetectionAsProcessed();
+                    
+                    // Notify detection thread that tracker is now active
+                    m_trackerStatusQueue.pushOverwrite(
+                        messages::TrackerStatus(messages::TrackerStatus::State::TRACKING, 
+                                               detection.boundingBox)
+                    );
+                    
+                    LOG_INFO("Tracker initialized from message queue (class: {}, conf: {:.2f})", 
+                             detection.classId, detection.confidence);
+                    
+                    // Visualize the initialization frame
+                    {
+                        std::lock_guard<std::mutex> lock(m_visMutex);
+                        cv::Mat visFrame = detection.frame.clone();
+                        m_visualizer.visualizeTracking(visFrame, true, detection.boundingBox,
+                                                     detection.classId, m_modelManager.getClassNames(),
+                                                     m_trackerManager.getTrackingPath(), nullptr, 0, false,
+                                                     m_navigationUnit.getCenteringRadius(),
+                                                     m_navigationUnit.getYawDeadZoneWidth());
+                        m_visualizer.updateTrackingFrame(visFrame);
+                        m_visualizer.showCombinedView();
+                    }
+                }
+                // Skip the rest of this iteration - tracker will update on next frame
+                continue;
+            }
+        }
+        
+        // Fallback: Also check ControlUnit for backward compatibility
         if (m_controlUnit.hasNewDetection()) {
             if (!m_trackerManager.isTracking() || m_controlUnit.hasTrackerFailed()) {
                 cv::Rect newBox;
@@ -515,7 +587,13 @@ void Application::trackingThread() {
                     m_controlUnit.setIsTracking(true);
                     m_controlUnit.setTrackerFailed(false);
                     m_controlUnit.markDetectionAsProcessed();
-                    LOG_INFO("Tracker initialized successfully with detected target (class: {})", newClassId);
+                    
+                    // Notify detection thread via message queue
+                    m_trackerStatusQueue.pushOverwrite(
+                        messages::TrackerStatus(messages::TrackerStatus::State::TRACKING, newBox)
+                    );
+                    
+                    LOG_INFO("Tracker initialized from ControlUnit (class: {})", newClassId);
                     
                     // Visualize the initialization frame
                     {
@@ -533,7 +611,6 @@ void Application::trackingThread() {
             } else {
                 m_controlUnit.markDetectionAsProcessed();
             }
-            // Skip the rest of this iteration - tracker will update on next frame
             continue;
         }
 
@@ -549,10 +626,25 @@ void Application::trackingThread() {
             m_trackerManager.update(frame);
 
             if (!m_trackerManager.isTracking()) {
-                // Tracking lost - let navigation thread handle PID reset
+                // Tracking lost - notify detection thread via message queue
                 m_controlUnit.setIsTracking(false);
                 m_controlUnit.setTrackerFailed(true, frame, m_trackerManager.getLastTrackBox());
-                LOG_WARN("Tracking lost - re-enabling detection for re-initialization");
+                
+                // Send LOST status to detection thread
+                m_trackerStatusQueue.pushOverwrite(
+                    messages::TrackerStatus(messages::TrackerStatus::State::LOST,
+                                           m_trackerManager.getLastTrackBox(), frame)
+                );
+                
+                LOG_WARN("Tracking lost - notified detection thread for re-initialization");
+            } else {
+                // Send tracking result to navigation thread via message queue
+                messages::TrackingResult trackingResult(
+                    m_trackerManager.getLastTrackBox(),
+                    frame.cols, frame.rows,
+                    m_trackerManager.getTracker() ? m_trackerManager.getTracker()->getLastConfidence() : 1.0f
+                );
+                m_trackingResultQueue.pushOverwrite(std::move(trackingResult));
             }
         }
 
@@ -596,6 +688,33 @@ void Application::trackingThread() {
             // Send tracking frame to UI if MainWindow is set
             if (m_mainWindow) {
                 m_mainWindow->updateTrackingFrameThreadSafe(frame);
+            }
+        }
+        
+        // Calculate and update FPS
+        if (m_trackerManager.isTracking()) {
+            fpsFrameCount++;
+            auto fpsCurrentTime = std::chrono::steady_clock::now();
+            auto fpsElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(fpsCurrentTime - fpsStartTime).count();
+            
+            if (fpsElapsed >= 1000) {  // Update FPS every second
+                currentFPS = (fpsFrameCount * 1000.0) / fpsElapsed;
+                fpsFrameCount = 0;
+                fpsStartTime = fpsCurrentTime;
+                
+                // Update FPS in UI
+                if (m_mainWindow) {
+                    QMetaObject::invokeMethod(m_mainWindow, "updateFPS",
+                        Qt::QueuedConnection, Q_ARG(double, currentFPS));
+                }
+            }
+        } else {
+            // Not tracking - reset FPS counter and show 0
+            fpsFrameCount = 0;
+            fpsStartTime = std::chrono::steady_clock::now();
+            if (m_mainWindow) {
+                QMetaObject::invokeMethod(m_mainWindow, "updateFPS",
+                    Qt::QueuedConnection, Q_ARG(double, 0.0));
             }
         }
     }
@@ -673,6 +792,7 @@ Handles:
 - PID control command generation and reset
 - MAVLink message processing
 - Tracking state monitoring for navigation purposes
+Uses message queue pattern to receive tracking results from tracking thread
 */
 void Application::navigationThread() {
     LOG_INFO("Navigation control thread started");
@@ -684,8 +804,15 @@ void Application::navigationThread() {
     int logCounter = 0;
     const int logInterval = 250; // Log every 5 seconds (250 * 20ms)
     
+    // Counter for MAVLink status updates to UI (every 500ms = 25 * 20ms)
+    int mavlinkStatusCounter = 0;
+    const int mavlinkStatusInterval = 25;
+    
     // Track previous tracking state to detect transitions
     bool wasTracking = false;
+    
+    // Cache for latest tracking result from message queue
+    std::optional<messages::TrackingResult> latestTrackingResult;
     
     while (m_running) {
         auto loopStart = std::chrono::steady_clock::now();
@@ -693,6 +820,31 @@ void Application::navigationThread() {
         // Process incoming MAVLink messages (non-blocking)
         if (m_mavlink && m_mavlinkEnabled) {
             m_mavlink->processIncomingMessages();
+            
+            // Periodically update MAVLink status in UI
+            if (m_mainWindow && ++mavlinkStatusCounter >= mavlinkStatusInterval) {
+                mavlinkStatusCounter = 0;
+                
+                bool connected = m_mavlink->isConnected();
+                uint32_t flightMode = m_mavlink->getCurrentFlightMode();
+                bool armed = m_mavlink->isVehicleArmed();
+                float altitude = m_mavlink->getCurrentAltitudeMSL();
+                float battery = 0.0f;  // TODO: Add battery monitoring when available
+                
+                QMetaObject::invokeMethod(m_mainWindow, "updateMAVLinkStatus",
+                    Qt::QueuedConnection,
+                    Q_ARG(bool, connected),
+                    Q_ARG(uint32_t, flightMode),
+                    Q_ARG(bool, armed),
+                    Q_ARG(float, altitude),
+                    Q_ARG(float, battery));
+            }
+        }
+        
+        // Check for new tracking results from message queue (non-blocking, get latest)
+        // This is the primary method for receiving tracking data (producer-consumer pattern)
+        if (auto trackingResult = m_trackingResultQueue.popLatest()) {
+            latestTrackingResult = std::move(trackingResult);
         }
         
         bool currentlyTracking = m_trackerManager.isTracking();
@@ -701,6 +853,7 @@ void Application::navigationThread() {
         // Detect tracking lost transition and reset PID
         if (wasTracking && !currentlyTracking) {
             m_navigationUnit.resetPIDStates();
+            latestTrackingResult = std::nullopt; // Clear cached tracking result
             LOG_WARN("Navigation: Tracking lost detected - PID states reset");
             logCounter = 0; // Reset counter for immediate logging when tracking resumes
         }
@@ -713,66 +866,83 @@ void Application::navigationThread() {
         
         // Only send control commands if actively tracking AND tracker hasn't failed
         if (currentlyTracking && !trackerFailed) {
-            // Get latest frame dimensions and tracking box
-            FrameData frameData;
-            if (FrameBufferManager::getInstance().getLatestFrame(frameData)) {
-                cv::Mat frame = frameData.image;
+            // Prefer message queue data if available and recent
+            if (latestTrackingResult.has_value() && latestTrackingResult->valid) {
+                const auto& trackResult = latestTrackingResult.value();
                 
-                if (!frame.empty() && m_mavlink && m_mavlinkEnabled) {
-                    uint32_t flightMode = m_mavlink->getCurrentFlightMode();
-                    
-                    // Only control in ALT_HOLD mode (mode 2)
-                    if (flightMode == 2) {
-                        // Check if vehicle is armed and arm if necessary
-                        if (!m_mavlink->isVehicleArmed()) {
-                            m_navigationUnit.armVehicle(true);
-                            LOG_INFO("Arming vehicle for navigation control");
-                        }
+                // Check if tracking result is recent (within 200ms)
+                auto age = std::chrono::steady_clock::now() - trackResult.timestamp;
+                if (age < std::chrono::milliseconds(200)) {
+                    if (m_mavlink && m_mavlinkEnabled) {
+                        uint32_t flightMode = m_mavlink->getCurrentFlightMode();
                         
-                        // Get current tracking box
-                        cv::Rect trackBox = m_trackerManager.getLastTrackBox();
-                        
-                        // Calculate navigation error
-                        cv::Point2f rawError = m_navigationUnit.calculateError(
-                            trackBox, frame.cols, frame.rows
-                        );
-                        
-                        // Generate and send control commands
-                        ControlOutputs outputs = m_navigationUnit.generateControlCommands(
-                            rawError, trackBox, frame.cols, frame.rows
-                        );
-                        
-                        // Convert milliradians back to radians for display
-                        float pitch_rad = outputs.pitch_output / 1000.0f;
-                        float yaw_rad = outputs.yaw_output / 1000.0f;
-                        
-                        // Periodic logging (avoid spamming) - using INFO level to show in UI
-                        if (++logCounter >= logInterval) {
-                            float altitude = m_mavlink->getCurrentAltitudeMSL();
-                            float climbRate = m_mavlink->getCurrentClimbRate();
-                            LOG_INFO("Nav: Alt={:.1f}m, Climb={:.2f}m/s, Error=({:.1f},{:.1f}), Pitch={:+.4f}rad, Yaw={:+.4f}rad", 
-                                     altitude, climbRate, rawError.x, rawError.y, pitch_rad, yaw_rad);
-                            
-                            // Also send to UI log window if available
-                            if (m_mainWindow) {
-                                // Force sign display with explicit formatting
-                                QString pitchStr = QString("%1%2").arg(pitch_rad >= 0 ? "+" : "").arg(pitch_rad, 0, 'f', 4);
-                                QString yawStr = QString("%1%2").arg(yaw_rad >= 0 ? "+" : "").arg(yaw_rad, 0, 'f', 4);
-                                QString logMsg = QString("Nav: Alt=%1m, Error=(%2,%3), Pitch=%4rad, Yaw=%5rad")
-                                    .arg(altitude, 0, 'f', 1)
-                                    .arg(rawError.x, 0, 'f', 1)
-                                    .arg(rawError.y, 0, 'f', 1)
-                                    .arg(pitchStr)
-                                    .arg(yawStr);
-                                QMetaObject::invokeMethod(m_mainWindow, "logMessage", 
-                                    Qt::QueuedConnection, Q_ARG(QString, logMsg));
+                        // Only control in GUIDED_NOGPS mode (mode 20)
+                        if (flightMode == 20) {
+                            // Check if vehicle is armed and arm if necessary
+                            if (!m_mavlink->isVehicleArmed()) {
+                                m_navigationUnit.armVehicle(true);
+                                LOG_INFO("Arming vehicle for navigation control");
                             }
                             
+                            // Calculate navigation error from message queue data
+                            cv::Point2f rawError = m_navigationUnit.calculateError(
+                                trackResult.trackedBox, trackResult.frameWidth, trackResult.frameHeight
+                            );
+                            
+                            // Generate and send control commands
+                            ControlOutputs outputs = m_navigationUnit.generateControlCommands(
+                                rawError, trackResult.trackedBox, trackResult.frameWidth, trackResult.frameHeight
+                            );
+                            
+                            // Suppress unused variable warnings
+                            (void)outputs;
+                        } else {
+                            // Not in control mode - reset counter
                             logCounter = 0;
                         }
-                    } else {
-                        // Not in control mode - reset counter
-                        logCounter = 0;
+                    }
+                } else {
+                    // Tracking result is stale - fall back to direct access
+                    latestTrackingResult = std::nullopt;
+                }
+            }
+            
+            // Fallback: Direct access to tracker for backward compatibility
+            if (!latestTrackingResult.has_value()) {
+                FrameData frameData;
+                if (FrameBufferManager::getInstance().getLatestFrame(frameData)) {
+                    cv::Mat frame = frameData.image;
+                    
+                    if (!frame.empty() && m_mavlink && m_mavlinkEnabled) {
+                        uint32_t flightMode = m_mavlink->getCurrentFlightMode();
+                        
+                        // Only control in GUIDED_NOGPS mode (mode 20)
+                        if (flightMode == 20) {
+                            // Check if vehicle is armed and arm if necessary
+                            if (!m_mavlink->isVehicleArmed()) {
+                                m_navigationUnit.armVehicle(true);
+                                LOG_INFO("Arming vehicle for navigation control");
+                            }
+                            
+                            // Get current tracking box
+                            cv::Rect trackBox = m_trackerManager.getLastTrackBox();
+                            
+                            // Calculate navigation error
+                            cv::Point2f rawError = m_navigationUnit.calculateError(
+                                trackBox, frame.cols, frame.rows
+                            );
+                            
+                            // Generate and send control commands
+                            ControlOutputs outputs = m_navigationUnit.generateControlCommands(
+                                rawError, trackBox, frame.cols, frame.rows
+                            );
+                            
+                            // Suppress unused variable warnings
+                            (void)outputs;
+                        } else {
+                            // Not in control mode - reset counter
+                            logCounter = 0;
+                        }
                     }
                 }
             }
@@ -797,6 +967,12 @@ void Application::navigationThread() {
 }
 
 void Application::cleanup() {
+    // Shutdown message queues first to unblock any waiting threads
+    m_detectionQueue.shutdown();
+    m_trackerStatusQueue.shutdown();
+    m_trackingResultQueue.shutdown();
+    LOG_INFO("Message queues shutdown");
+    
     if (m_mavlink) {
         m_mavlink->stop();
         m_mavlink.reset();
@@ -818,6 +994,11 @@ void Application::setMainWindow(MainWindow* window) {
 void Application::stop() {
     m_running.store(false);
     m_threadsRunning.store(false);
+    
+    // Shutdown message queues to unblock any waiting threads
+    m_detectionQueue.shutdown();
+    m_trackerStatusQueue.shutdown();
+    m_trackingResultQueue.shutdown();
 }
 
 void Application::startThreads() {
@@ -851,7 +1032,6 @@ bool Application::takeoff(float altitude) {
         LOG_ERROR("MAVLink not initialized, cannot takeoff");
         return false;
     }
-    
     LOG_INFO("Requesting takeoff to {} meters", altitude);
     return m_mavlink->takeoff(altitude);
 }
@@ -866,6 +1046,16 @@ bool Application::land() {
     return m_mavlink->land();
 }
 
+bool Application::arm(bool armVehicle) {
+    if (!m_mavlink) {
+        LOG_ERROR("MAVLink not initialized, cannot arm/disarm");
+        return false;
+    }
+    
+    LOG_INFO("{} vehicle", armVehicle ? "Arming" : "Disarming");
+    return m_mavlink->armDisarm(armVehicle);
+}
+
 bool Application::setFlightMode(uint32_t mode) {
     if (!m_mavlink) {
         LOG_ERROR("MAVLink not initialized, cannot set flight mode");
@@ -874,4 +1064,14 @@ bool Application::setFlightMode(uint32_t mode) {
     
     LOG_INFO("Setting flight mode to: {}", mode);
     return m_mavlink->setFlightMode(mode);
-} 
+}
+
+void Application::setPitchPIDGains(float kp, float ki, float kd) {
+    m_navigationUnit.setPitchPIDGains(kp, ki, kd);
+    LOG_INFO("Pitch PID gains updated: Kp={:.3f}, Ki={:.3f}, Kd={:.4f}", kp, ki, kd);
+}
+
+void Application::setYawPIDGains(float kp, float ki, float kd) {
+    m_navigationUnit.setYawPIDGains(kp, ki, kd);
+    LOG_INFO("Yaw PID gains updated: Kp={:.3f}, Ki={:.3f}, Kd={:.4f}", kp, ki, kd);
+}

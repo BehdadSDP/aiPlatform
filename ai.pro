@@ -104,3 +104,5 @@ HEADERS += \
     include/navigation_unit.h \
     include/mainwindow.h \
     include/logger.h \
+    include/thread_safe_queue.h \
+    include/inter_thread_messages.h \
